@@ -2,6 +2,10 @@
 def get_neighbourhood(n_type, mat, coordinates):
     m, n = coordinates
     w, h = len(mat[0]), len(mat)
+
+    if not (0 <= m < h and 0 <= n < w):
+        return []
+
     offsets = (-1, 0, 1)
     neighbours = []
 
