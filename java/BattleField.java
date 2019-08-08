@@ -20,20 +20,17 @@ public class BattleField {
         int countX, countY;
         for (i = 0; i < 10; i++) {
             for (j = 0; j < 10; j++) {
-                System.out.printf("i: %d - j: %d%n", i, j);
                 if (field[i][j] == 1) {
                     // ship found. check direction (either right or down)
                     if (j < 9 && field[i][j + 1] == 1) {
                         // ship going right
                         magX = 1;
                         magY = 0;
-                        System.out.println("Right");
                     }
                     else {
                         // ship going down
                         magX = 0;
                         magY = 1;
-                        System.out.println("Down");
                     }
 
                     // count ship cells
@@ -52,10 +49,6 @@ public class BattleField {
                     shipCounts[cellCount]++;
                 }
             }
-        }
-
-        for (i = 0; i < 10; i++) {
-            System.out.print(shipCounts[i] + " ");
         }
 
         // check that ship counts match the expected ships
