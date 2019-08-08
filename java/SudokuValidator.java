@@ -3,10 +3,6 @@ import java.util.*;
 class NumberTracker {
 	private Set<Integer> remaining;
 	
-	public NumberTracker() {
-		reset();
-	}
-	
 	public void reset() {
 		remaining = new HashSet<Integer>();
 		
@@ -16,13 +12,7 @@ class NumberTracker {
 	}
 	
 	public boolean removeNum(int num) {
-		if (!remaining.contains(num)) {
-			return false;
-		}
-		else {
-			remaining.remove(num);
-			return true;
-		}
+		return remaining.remove(num);
 	}
 }
 
@@ -45,7 +35,9 @@ public class SudokuValidator {
 		for (i = 0; i < 9; i++) {
 			numberTracker.reset();
 			for (j = 0; j < 9; j++) {
-				
+				if (!numberTracker.removeNum(sudoku[i][j])) {
+					return false;
+				}
 			}
 		}
 		
