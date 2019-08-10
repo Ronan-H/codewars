@@ -1,38 +1,37 @@
+import itertools
 
-def get_indexes(n):
-    down = [n for n in range(n)]
-    up = down[-2:0:-1]
-    return down + up
+
+# generator used to cycle through indexes (eg. 0, 1, 2, 1, 0, 1 ..)
+def cycle_indexes(n):
+    nums = [n for n in range(n)]
+    index_cycle = itertools.cycle(nums + nums[-2:0:-1])
+    while True:
+        yield next(itertools.cycle(index_cycle))
 
 
 def encode_rail_fence_cipher(string, n):
-    indexes = get_indexes(n)
+    cycle = cycle_indexes(n)
 
     # distribute characters into rails
     rails = [""] * n
-    pos = 0
     for c in string:
-        rails[indexes[pos]] += c
-        pos = (pos + 1) % len(indexes)
+        rails[next(cycle)] += c
 
     # join rails together into one encoded message
     return "".join(rails)
 
 
 def decode_rail_fence_cipher(string, n):
-    indexes = get_indexes(n)
+    cycle = cycle_indexes(n)
 
     # count number of characters in each rail when string
     # was encoded
     rail_counts = [0] * n
-    pos = 0
 
     for _ in string:
-        index = indexes[pos]
-        rail_counts[index] += 1
-        pos = (pos + 1) % len(indexes)
+        rail_counts[next(cycle)] += 1
 
-    # reconstruct rails
+    # reconstruct rail characters
     rails = []
     index = 0
     for count in rail_counts:
@@ -40,15 +39,10 @@ def decode_rail_fence_cipher(string, n):
         index += count
 
     # alternate through rails to decode message
-    pos = 0
+    cycle = cycle_indexes(n)
     decoded = ""
     for _ in string:
-        index = indexes[pos]
-        decoded += rails[index][0]
-        del rails[index][0]
-        pos = (pos + 1) % len(indexes)
+        decoded += rails[next(cycle)].pop(0)
 
     return decoded
 
-
-print(decode_rail_fence_cipher("WECRLTEERDSOEEFEAOCAIVDEN", 3), "WEAREDISCOVEREDFLEEATONCE", sep="\n")
