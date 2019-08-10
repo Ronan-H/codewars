@@ -19,19 +19,29 @@ def encode_rail_fence_cipher(string, n):
 
 
 def decode_rail_fence_cipher(string, n):
-    rails = [""] * n
+    indexes = get_indexes(n)
+
+    rail_counts = [0] * n
     pos = 0
-    direction = 1
 
-    for c in string:
-        rails[pos] += c
+    for _ in string:
+        rail_counts[indexes[pos]] += 1
+        pos = (pos + 1) % len(indexes)
 
-        pos += direction
-        if pos < 0:
-            pos = 1
-            direction = 1
-        elif pos > n - 1:
-            pos = n - 2
-            direction = -1
+    rails = []
+    index = 0
+    for count in rail_counts:
+        rails.append(list(string[index:index + count]))
+        index += count
 
-    return "".join(rails)
+    pos = 0
+    decoded = ""
+    for _ in string:
+        decoded += rails[indexes[pos]][0]
+        del rails[indexes[pos]][0]
+        pos = (pos + 1) % len(indexes)
+
+    return decoded
+
+
+print(decode_rail_fence_cipher("WECRLTEERDSOEEFEAOCAIVDEN", 3), "WEAREDISCOVEREDFLEEATONCE", sep="\n")
