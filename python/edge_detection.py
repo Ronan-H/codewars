@@ -9,7 +9,7 @@ def edge_detection(rle):
 class Image:
     def __init__(self, rle):
         self.w = rle[0]
-        self.h = sum(rle[2::2])
+        self.h = sum(rle[2::2]) // self.w
         self.img = [n for seq in [[rle[i]] * rle[i + 1] for i in range(1, len(rle), 2)] for n in seq]
         #print("Input img: ", self.img)
         self.len = len(self.img)
@@ -68,4 +68,5 @@ class Image:
 #print("Result: ", edge_detection("7 15 4 100 15 25 2 175 2 25 5 175 2 25 5"))
 #print("Actual: ", [int(s) for s in "7 85 5 0 2 85 5 75 10 150 2 75 3 0 2 150 2 0 4".split(" ")])
 
+# big sample
 print(edge_detection("10 35 500000000 200 500000000"))
