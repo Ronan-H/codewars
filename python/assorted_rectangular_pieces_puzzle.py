@@ -1,6 +1,5 @@
 import time
 import array
-import math
 
 
 def piece_copy(piece, flipped):
@@ -10,8 +9,7 @@ def piece_copy(piece, flipped):
     return p
 
 
-def can_place(board, piece, i):
-    side_len = int(math.sqrt(len(board)))
+def can_place(board, side_len, piece, i):
     # bounds check
     if (i % side_len) + piece[1] > side_len or (i // side_len) + piece[0] > side_len:
         return False
@@ -24,9 +22,9 @@ def can_place(board, piece, i):
     return True
 
 
-def apply_piece_mask(board, holes_used, piece, i, placing):
+def apply_piece_mask(board, side_len, holes_used, piece, i, placing):
     for r in range(piece[0]):
-        row = r * int(math.sqrt(len(board)))
+        row = r * side_len
         for c in range(piece[1]):
             index = row + i + c
             board[index] = placing
@@ -38,10 +36,9 @@ def apply_piece_mask(board, holes_used, piece, i, placing):
                     holes_used.add(index)
 
 
-def count_perimeter(board):
+def count_perimeter(board, side_len):
     perim = 0
     size = len(board)
-    side_len = int(math.sqrt(size))
 
     for i in range(size):
         if board[i]:
@@ -61,7 +58,7 @@ def count_perimeter(board):
     return perim
 
 
-def exhaust_piece_perms(board, hole_locs, holes_used, pieces, used: list, index=0):
+def exhaust_piece_perms(board, side_len, hole_locs, holes_used, pieces, used: list, index=0):
     if index == len(pieces):
         # all pieces placed, time to bail out
         return True
@@ -69,30 +66,29 @@ def exhaust_piece_perms(board, hole_locs, holes_used, pieces, used: list, index=
     piece = pieces[index]
     pf = piece_copy(piece, True)
     candidates = []
-
     # make a list of candidate moves, taking note of the resulting perimeter
     for i in hole_locs.difference(set(u for u in holes_used)):
         for flipped in [False, True] if piece[0] != piece[1] else [False]:
             p = pf if flipped else piece
-            if can_place(board, p, i):
-                apply_piece_mask(board, None, p, i, False)
-                candidates.append((i, flipped, count_perimeter(board)))
-                apply_piece_mask(board, None, p, i, True)
+            if can_place(board, side_len, p, i):
+                apply_piece_mask(board, side_len, None, p, i, False)
+                candidates.append((i, flipped, count_perimeter(board, side_len,)))
+                apply_piece_mask(board, side_len, None, p, i, True)
 
     # sort candidate moves by perimeter, smallest to largest
-    candidates.sort(key=lambda c: c[2], reverse=False)
+    candidates.sort(key=lambda c: c[2])
 
     # exhaust all piece positions using the above list
     for i, flipped, _ in candidates:
         p = pf if flipped else piece
-        apply_piece_mask(board, holes_used, p, i, False)
+        apply_piece_mask(board, side_len, holes_used, p, i, False)
         used.append([i, 1 if flipped else 0, piece[2]])
-        params = board, hole_locs, holes_used, pieces, used, index + 1
+        params = board, side_len, hole_locs, holes_used, pieces, used, index + 1
         if exhaust_piece_perms(*params):
             return True
         # undo move
         used.pop()
-        apply_piece_mask(board, holes_used, p, i, True)
+        apply_piece_mask(board, side_len, holes_used, p, i, True)
     return False
 
 
@@ -108,7 +104,7 @@ def solve_puzzle(board, pieces):
     hole_locs = set(i for i, v in enumerate(board) if board[i])
 
     used = []
-    exhaust_piece_perms(board, hole_locs, set(), pieces, used)
+    exhaust_piece_perms(board, side_len, hole_locs, set(), pieces, used)
     # convert single index back into 2D indexes
     used = [[u[0] // side_len, u[0] % side_len, u[1], u[2]] for u in used]
     # restore original piece ordering
