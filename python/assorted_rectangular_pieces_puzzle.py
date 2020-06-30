@@ -58,6 +58,43 @@ def count_perimeter(board, side_len):
     return perim
 
 
+def create_island_mask(board, side_len):
+    size = len(board)
+    mask = array.array('b', [0] * size)
+    global_visited = set()
+    visited = set()
+    stack = []
+
+    for i in range(size):
+        if board[i] and i not in global_visited:
+            # begin flooding
+            stack.append(i)
+
+            while len(stack) > 0:
+                index = stack.pop()
+                visited.add(index)
+                # ABOVE
+                if index >= side_len and board[index - side_len] and (index - side_len) not in visited:
+                    stack.append(index - side_len)
+                # BELOW
+                if i < (size - side_len) and board[index + side_len] and (index + side_len) not in visited:
+                    stack.append(index + side_len)
+                # LEFT
+                if i % side_len > 0 and board[index - 1] and (index - 1) not in visited:
+                    stack.append(index - 1)
+                # RIGHT
+                if i % side_len < side_len - 1 and board[index + 1] and (index + 1) not in visited:
+                    stack.append(index + 1)
+
+            island_size = len(visited)
+            for v in visited:
+                mask[v] = island_size
+
+            global_visited |= visited
+            visited = set()
+    return mask
+
+
 def exhaust_piece_perms(board, side_len, hole_locs, holes_used, pieces, used: list, index=0):
     if index == len(pieces):
         # all pieces placed, time to bail out
@@ -66,6 +103,7 @@ def exhaust_piece_perms(board, side_len, hole_locs, holes_used, pieces, used: li
     piece = pieces[index]
     pf = piece_copy(piece, True)
     candidates = []
+    island_mask = create_island_mask(board, side_len)
     # make a list of candidate moves, taking note of the resulting perimeter
     for i in hole_locs.difference(set(u for u in holes_used)):
         for flipped in [False, True] if piece[0] != piece[1] else [False]:
