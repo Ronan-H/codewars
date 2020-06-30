@@ -1,5 +1,5 @@
 import time
-
+import array
 
 def piece_copy(piece, flipped):
     p = [d for d in piece]
@@ -20,15 +20,16 @@ def can_place(board, piece, x, y):
     return True
 
 
-def apply_piece_mask(board, holes_used, piece, x, y, placing=False):
+def apply_piece_mask(board, holes_used, piece, x, y, placing):
     for i in range(y, y + piece[0]):
         for j in range(x, x + piece[1]):
             board[i][j] = placing
 
-            if placing:
-                holes_used.remove((i, j))
-            else:
-                holes_used.add((i, j))
+            if holes_used is not None:
+                if placing:
+                    holes_used.remove((i, j))
+                else:
+                    holes_used.add((i, j))
 
 
 def count_perimeter(board):
@@ -63,9 +64,9 @@ def exhaust_piece_perms(board, hole_locs, holes_used, pieces, used: list, index=
         for flipped in [False, True] if piece[0] != piece[1] else [False]:
             p = pf if flipped else piece
             if can_place(board, p, j, i):
-                apply_piece_mask(board, holes_used, p, j, i)
+                apply_piece_mask(board, None, p, j, i, False)
                 candidates.append((i, j, flipped, count_perimeter(board)))
-                apply_piece_mask(board, holes_used, p, j, i, placing=True)
+                apply_piece_mask(board, None, p, j, i, True)
 
     # sort candidate moves by perimeter, smallest to largest
     candidates.sort(key=lambda c: c[3], reverse=False)
@@ -73,13 +74,14 @@ def exhaust_piece_perms(board, hole_locs, holes_used, pieces, used: list, index=
     # exhaust all piece positions using the above list
     for i, j, flipped, _ in candidates:
         p = pf if flipped else piece
-        apply_piece_mask(board, holes_used, p, j, i)
+        apply_piece_mask(board, holes_used, p, j, i, False)
         used.append([i, j, 1 if flipped else 0, piece[2]])
         params = board, hole_locs, holes_used, pieces, used, index + 1
         if exhaust_piece_perms(*params):
             return True
-        apply_piece_mask(board, holes_used, p, j, i, placing=True)
+        # undo move
         used.pop()
+        apply_piece_mask(board, holes_used, p, j, i, True)
     return False
 
 
@@ -89,7 +91,7 @@ def solve_puzzle(board, pieces):
     # give each piece an ID so they can be sorted back to their original order later
     pieces = [p + [i] for i, p in enumerate(pieces)]
     pieces.sort(key=lambda p: p[0] * p[1], reverse=True)
-    board = [[c == '0' for c in l] for l in board]
+    board = tuple(array.array('b', [1 if c == '0' else 0 for c in l]) for l in board)
     hole_locs = set([(i, j) for (i, j) in [(i, j) for i in range(len(board)) for j in range(len(board))] if board[i][j]])
 
     used = []
