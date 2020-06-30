@@ -1,4 +1,5 @@
 import time
+import numpy as np
 
 
 def piece_copy(piece, flipped):
@@ -9,47 +10,20 @@ def piece_copy(piece, flipped):
 
 
 def can_place(board, piece, x, y):
-    # bounds check
-    if x + piece[1] > len(board) or y + piece[0] > len(board):
-        return False
-
-    for i in range(y, y + piece[0]):
-        for j in range(x, x + piece[1]):
-            if not board[i][j]:
-                return False
-    return True
+    return board[y:y + piece[0], x:x + piece[1]].all()
 
 
-def apply_piece_mask(board, holes_used, piece, x, y, placing=False):
-    for i in range(y, y + piece[0]):
-        for j in range(x, x + piece[1]):
-            board[i][j] = placing
-
-            if placing:
-                holes_used.remove((i, j))
-            else:
-                holes_used.add((i, j))
+def apply_piece_mask(board, piece, x, y, placing):
+    board[y:y + piece[0], x:x + piece[1]] = placing
 
 
 def count_perimeter(board):
-    perim = 0
-
-    for y in range(len(board)):
-        for x in range(len(board)):
-            if board[y][x]:
-                if y == 0 or not board[y - 1][x]:
-                    perim += 1
-                if y == len(board) - 1 or not board[y + 1][x]:
-                    perim += 1
-                if x == 0 or not board[y][x - 1]:
-                    perim += 1
-                if x == len(board) - 1 or not board[y][x + 1]:
-                    perim += 1
-
-    return perim
+    # "Calculate perimeter of numpy array":
+    # https://stackoverflow.com/questions/13443246/calculate-perimeter-of-numpy-array
+    return np.sum(board[:, 1:] != board[:, :-1]) + np.sum(board[1:, :] != board[:-1, :])
 
 
-def exhaust_piece_perms(board, hole_locs, holes_used, pieces, used: list, index=0):
+def exhaust_piece_perms(board, pieces, used: list, index=0):
     if index == len(pieces):
         # all pieces placed, time to bail out
         return True
@@ -59,13 +33,14 @@ def exhaust_piece_perms(board, hole_locs, holes_used, pieces, used: list, index=
     candidates = []
 
     # make a list of candidate moves, taking note of the resulting perimeter
-    for i, j in hole_locs.difference(set(u for u in holes_used)):
-        for flipped in [False, True] if piece[0] != piece[1] else [False]:
-            p = pf if flipped else piece
-            if can_place(board, p, j, i):
-                apply_piece_mask(board, holes_used, p, j, i)
-                candidates.append((i, j, flipped, count_perimeter(board)))
-                apply_piece_mask(board, holes_used, p, j, i, placing=True)
+    for i in range(len(board)):
+        for j in range(len(board)):
+            for flipped in [False, True] if piece[0] != piece[1] else [False]:
+                p = pf if flipped else piece
+                if can_place(board, p, j, i):
+                    apply_piece_mask(board, p, j, i, False)
+                    candidates.append((i, j, flipped, count_perimeter(board)))
+                    apply_piece_mask(board, p, j, i, True)
 
     # sort candidate moves by perimeter, smallest to largest
     candidates.sort(key=lambda c: c[3], reverse=False)
@@ -73,13 +48,14 @@ def exhaust_piece_perms(board, hole_locs, holes_used, pieces, used: list, index=
     # exhaust all piece positions using the above list
     for i, j, flipped, _ in candidates:
         p = pf if flipped else piece
-        apply_piece_mask(board, holes_used, p, j, i)
+        apply_piece_mask(board, p, j, i, False)
         used.append([i, j, 1 if flipped else 0, piece[2]])
-        params = board, hole_locs, holes_used, pieces, used, index + 1
+        params = board, pieces, used, index + 1
         if exhaust_piece_perms(*params):
             return True
-        apply_piece_mask(board, holes_used, p, j, i, placing=True)
+        # undo move
         used.pop()
+        apply_piece_mask(board, p, j, i, True)
     return False
 
 
@@ -89,11 +65,10 @@ def solve_puzzle(board, pieces):
     # give each piece an ID so they can be sorted back to their original order later
     pieces = [p + [i] for i, p in enumerate(pieces)]
     pieces.sort(key=lambda p: p[0] * p[1], reverse=True)
-    board = [[c == '0' for c in l] for l in board]
-    hole_locs = set([(i, j) for (i, j) in [(i, j) for i in range(len(board)) for j in range(len(board))] if board[i][j]])
+    board = np.array([[1 if c == '0' else 0 for c in l] for l in board], dtype=np.bool)
 
     used = []
-    exhaust_piece_perms(board, hole_locs, set(), pieces, used)
+    exhaust_piece_perms(board, pieces, used)
     # restore original piece ordering
     used.sort(key=lambda p: p[3])
     # remove piece IDs
