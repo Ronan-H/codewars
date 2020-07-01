@@ -1,6 +1,8 @@
 import time
 import array
 
+s = time.time()
+
 
 def piece_copy(piece, flipped):
     p = [d for d in piece]
@@ -90,39 +92,60 @@ def count_islands(board, side_len):
     return count
 
 
-def exhaust_piece_perms(board, side_len, hole_locs, holes_used, pieces, used: list):
+def exhaust_piece_perms(board, side_len, hole_locs, holes_used, pieces, used: list, max_candidates):
     if len(pieces) == 0:
         # all pieces placed, time to bail out
         return True
 
+    if time.time() - s > 10:
+        print("Took too long, terminating...")
+        exit(0)
+
     candidates = []
     piece_candidate_counts = [0] * (max(p[2] for p in pieces) + 1)
+    tried = set()
     # make a list of candidate moves, taking note of the resulting perimeter
     for piece in pieces:
+        pf = piece_copy(piece, True)
+
+        can_place_somewhere = False
+
+        pt = (piece[0], piece[1])
+        if pt in tried:
+            continue
+        tried.add(pt)
+        tried.add((pt[1], pt[0]))
+
         for flipped in [False, True] if piece[0] != piece[1] else [False]:
-            p = piece_copy(piece, True) if flipped else piece
+            p = pf if flipped else piece
+
             for i in hole_locs.difference(set(u for u in holes_used)):
                 if can_place(board, side_len, p, i):
                     apply_piece_mask(board, side_len, None, p, i, False)
-                    candidates.append((p, flipped, i, count_perimeter(board, side_len)))
+                    candidates.append((p, flipped, i, count_perimeter(board, side_len), 0))
                     piece_candidate_counts[p[2]] += 1
                     apply_piece_mask(board, side_len, None, p, i, True)
+                    can_place_somewhere = True
+        # make sure you can place every piece somewhere
+        if not can_place_somewhere:
+            return False
 
     # sort candidate moves by perimeter, smallest to largest
-    candidates.sort(key=lambda c: (piece_candidate_counts[c[0][2]], c[3]))
+    candidates.sort(key=lambda c: (c[3], piece_candidate_counts[c[0][2]]))
+    candidates = candidates[:max_candidates]
     #print(candidates)
 
     # each piece remaining needs at least one candidate move
-    if len(set(c[0][2] for c in candidates)) < len(set(p[2] for p in pieces)):
-        return False
+    #if len(set(c[0][2] for c in candidates)) < len(set(p[2] for p in pieces)):
+    #    return False
 
     # exhaust all piece positions using the above list
-    for p, flipped, i, _ in candidates:
+    for p, flipped, i, _, _ in candidates:
         #print('Placing piece', p)
         apply_piece_mask(board, side_len, holes_used, p, i, False)
         used.append([i, 1 if flipped else 0, p[2]])
         pieces_less_used = [x for x in pieces if x[2] != p[2]]
-        params = board, side_len, hole_locs, holes_used, pieces_less_used, used
+        params = board, side_len, hole_locs, holes_used, pieces_less_used, used, max_candidates
         if exhaust_piece_perms(*params):
             return True
         # undo move
@@ -136,6 +159,8 @@ def solve_puzzle(board, pieces):
     start = time.time()
 
     side_len = len(board)
+    print('board:', board)
+    print('pieces:', pieces)
 
     # give each piece an ID so they can be sorted back to their original order later
     pieces = [p + [i] for i, p in enumerate(pieces)]
@@ -144,7 +169,12 @@ def solve_puzzle(board, pieces):
     hole_locs = set(i for i, v in enumerate(board) if board[i])
 
     used = []
-    exhaust_piece_perms(board, side_len, hole_locs, set(), pieces, used)
+    max_candidates = 1
+    while not exhaust_piece_perms(board, side_len, hole_locs, set(), pieces, used, max_candidates):
+        max_candidates += 1
+        used = []
+    print('Max candidates:', max_candidates)
+
     # convert single index back into 2D indexes
     used = [[u[0] // side_len, u[0] % side_len, u[1], u[2]] for u in used]
     # restore original piece ordering
@@ -158,22 +188,9 @@ def solve_puzzle(board, pieces):
     return used
 
 
-pre_test1 =\
+test_args =\
 [
-    [
-			'            ',
-			' 00000      ',
-			' 00000      ',
-			' 00000   00 ',
-			'       000  ',
-			'   00  000  ',
-			' 0000 00    ',
-			' 0000 00    ',
-			' 00   000 0 ',
-			'   0  000 0 ',
-			' 000      0 ',
-			'            '
-    ],
-	[[1,1],[1,1],[1,2],[1,2],[1,2],[1,3],[1,3],[1,4],[1,4],[2,2],[2,2],[2,3],[2,3],[2,5]]]
+    ['     0          ', '     0      0   ', ' 00000   0  0   ', ' 0000     0000  ', ' 0000000000  0  ', ' 000000000  00  ', ' 0000000000000  ', ' 000000000000   ', '  00000000000   ', '   0000000   0  ', '    0  000   000', '           0    ', '        00 0    ', '     0000000    ', ' 000000    0 0  ', '00           0  '],
+    [[1, 1], [1, 1], [1, 1], [1, 1], [1, 1], [1, 1], [1, 2], [1, 2], [1, 2], [1, 2], [1, 2], [1, 3], [1, 3], [1, 3], [1, 3], [1, 3], [1, 4], [1, 4], [1, 6], [1, 6], [2, 2], [3, 3], [4, 6], [5, 5]]]
 
-print('Solution:', solve_puzzle(*pre_test1))
+print('Solution:', solve_puzzle(*test_args))
