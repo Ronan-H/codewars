@@ -96,7 +96,7 @@ def exhaust_piece_perms(board, side_len, hole_locs, holes_used, pieces, used: li
         return True
 
     candidates = []
-    islands_before = count_islands(board, side_len)
+    piece_candidate_counts = [0] * (max(p[2] for p in pieces) + 1)
     # make a list of candidate moves, taking note of the resulting perimeter
     for piece in pieces:
         for flipped in [False, True] if piece[0] != piece[1] else [False]:
@@ -104,19 +104,20 @@ def exhaust_piece_perms(board, side_len, hole_locs, holes_used, pieces, used: li
             for i in hole_locs.difference(set(u for u in holes_used)):
                 if can_place(board, side_len, p, i):
                     apply_piece_mask(board, side_len, None, p, i, False)
-                    candidates.append((p, flipped, i, count_islands(board, side_len), count_perimeter(board, side_len)))
+                    candidates.append((p, flipped, i, count_perimeter(board, side_len)))
+                    piece_candidate_counts[p[2]] += 1
                     apply_piece_mask(board, side_len, None, p, i, True)
 
     # sort candidate moves by perimeter, smallest to largest
-    candidates.sort(key=lambda c: c[4])
-    print(candidates)
+    candidates.sort(key=lambda c: (piece_candidate_counts[c[0][2]], c[3]))
+    #print(candidates)
 
     # each piece remaining needs at least one candidate move
     if len(set(c[0][2] for c in candidates)) < len(set(p[2] for p in pieces)):
         return False
 
     # exhaust all piece positions using the above list
-    for p, flipped, i, _, _ in candidates:
+    for p, flipped, i, _ in candidates:
         #print('Placing piece', p)
         apply_piece_mask(board, side_len, holes_used, p, i, False)
         used.append([i, 1 if flipped else 0, p[2]])
@@ -125,7 +126,7 @@ def exhaust_piece_perms(board, side_len, hole_locs, holes_used, pieces, used: li
         if exhaust_piece_perms(*params):
             return True
         # undo move
-        print('Backtracking...')
+        #print('Backtracking...')
         used.pop()
         apply_piece_mask(board, side_len, holes_used, p, i, True)
     return False
