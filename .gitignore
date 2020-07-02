@@ -72,3 +72,5 @@ fabric.properties
 venv/
 .idea/
 
+# debug images
+*.png
