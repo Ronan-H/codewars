@@ -1,5 +1,9 @@
 import time
 import array
+from PIL import Image
+from PIL import ImageDraw
+import random
+import colorsys
 
 s = time.time()
 
@@ -92,7 +96,36 @@ def count_islands(board, side_len):
     return count
 
 
-def exhaust_piece_perms(board, side_len, hole_locs, holes_used, pieces, used: list, max_candidates):
+def draw_board(board, side_len, used, pieces, square_size, file_name):
+    img_len = side_len * square_size
+    img = Image.new('RGB', (img_len, img_len), color='black')
+    draw = ImageDraw.Draw(img)
+
+    # draw holes
+    for i in range(len(board)):
+        if board[i]:
+            y = (i // side_len) * square_size
+            x = (i % side_len) * square_size
+            draw.rectangle((x, y, x + square_size, y + square_size), fill=(255, 255, 255))
+
+    # draw each piece placed on the board in random colours
+    print('used', used)
+    print('pieces', pieces)
+    for i, flipped, id_num in used:
+        p = piece_copy([p for p in pieces if p[2] == id_num][0], flipped)
+        y = i // side_len
+        x = i % side_len
+        random_fill = tuple(round(c * 255) for c in colorsys.hsv_to_rgb(random.random(), 1, 1))
+
+        for y_off in range(p[0]):
+            for x_off in range(p[1]):
+                new_x = (x + x_off) * square_size
+                new_y = (y + y_off) * square_size
+                draw.rectangle((new_x, new_y, new_x + square_size, new_y + square_size), random_fill, (100, 100, 100))
+    img.save(file_name)
+
+
+def exhaust_piece_perms(board, side_len, hole_locs, holes_used, pieces, orig_pieces, used: list, max_candidates):
     if len(pieces) == 0:
         # all pieces placed, time to bail out
         return True
@@ -103,6 +136,7 @@ def exhaust_piece_perms(board, side_len, hole_locs, holes_used, pieces, used: li
 
     candidates = []
     piece_candidate_counts = [0] * (max(p[2] for p in pieces) + 1)
+    orig_perim = count_perimeter(board, side_len)
     tried = set()
     # make a list of candidate moves, taking note of the resulting perimeter
     for piece in pieces:
@@ -128,10 +162,11 @@ def exhaust_piece_perms(board, side_len, hole_locs, holes_used, pieces, used: li
                     can_place_somewhere = True
         # make sure you can place every piece somewhere
         if not can_place_somewhere:
+            draw_board(board, side_len, used, orig_pieces, 25, 'board.png')
             return False
 
     # sort candidate moves by perimeter, smallest to largest
-    candidates.sort(key=lambda c: (c[3], piece_candidate_counts[c[0][2]]))
+    candidates.sort(key=lambda c: (piece_candidate_counts[c[0][2]], 0 if c[3] < orig_perim else 1))
     candidates = candidates[:max_candidates]
     #print(candidates)
 
@@ -145,7 +180,7 @@ def exhaust_piece_perms(board, side_len, hole_locs, holes_used, pieces, used: li
         apply_piece_mask(board, side_len, holes_used, p, i, False)
         used.append([i, 1 if flipped else 0, p[2]])
         pieces_less_used = [x for x in pieces if x[2] != p[2]]
-        params = board, side_len, hole_locs, holes_used, pieces_less_used, used, max_candidates
+        params = board, side_len, hole_locs, holes_used, pieces_less_used, orig_pieces, used, max_candidates
         if exhaust_piece_perms(*params):
             return True
         # undo move
@@ -170,7 +205,7 @@ def solve_puzzle(board, pieces):
 
     used = []
     max_candidates = 1
-    while not exhaust_piece_perms(board, side_len, hole_locs, set(), pieces, used, max_candidates):
+    while not exhaust_piece_perms(board, side_len, hole_locs, set(), pieces, pieces, used, max_candidates):
         max_candidates += 1
         used = []
     print('Max candidates:', max_candidates)
@@ -190,7 +225,7 @@ def solve_puzzle(board, pieces):
 
 test_args =\
 [
-    ['     0          ', '     0      0   ', ' 00000   0  0   ', ' 0000     0000  ', ' 0000000000  0  ', ' 000000000  00  ', ' 0000000000000  ', ' 000000000000   ', '  00000000000   ', '   0000000   0  ', '    0  000   000', '           0    ', '        00 0    ', '     0000000    ', ' 000000    0 0  ', '00           0  '],
-    [[1, 1], [1, 1], [1, 1], [1, 1], [1, 1], [1, 1], [1, 2], [1, 2], [1, 2], [1, 2], [1, 2], [1, 3], [1, 3], [1, 3], [1, 3], [1, 3], [1, 4], [1, 4], [1, 6], [1, 6], [2, 2], [3, 3], [4, 6], [5, 5]]]
+    ['00     000     ', ' 000           ', ' 000  0  0000  ', ' 000  00 00000 ', ' 000  00  0000 ', '  00  00     0 ', '  00  00  00000', '  00000000000  ', '   00    0     ', '   00  000 00  ', '       000  00 ', '       000  00 ', '        0    0 ', '            00 ', '            0  '],
+    [[1, 1], [1, 1], [1, 2], [1, 2], [1, 2], [1, 2], [1, 2], [1, 3], [1, 3], [1, 3], [1, 3], [1, 3], [1, 4], [1, 4], [1, 5], [1, 8], [2, 2], [2, 2], [2, 4], [3, 3], [3, 4]]]
 
 print('Solution:', solve_puzzle(*test_args))
