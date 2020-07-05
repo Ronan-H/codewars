@@ -4,6 +4,7 @@ import bisect
 from PIL import Image
 from PIL import ImageDraw
 import colorsys
+import cProfile
 
 s = time.time()
 
@@ -52,8 +53,9 @@ def can_place(board, side_len, piece, i):
         return False
 
     for r in range(piece[0]):
+        row = (r * side_len)
         for j in range(piece[1]):
-            if not board[i + (r * side_len) + j]:
+            if not board[i + row + j]:
                 return False
     return True
 
@@ -78,7 +80,8 @@ def add_to_candidate_locations(locs, side_len, candidate, i):
         row = r * side_len
         for c in range(piece[1]):
             index = row + i + c
-            locs[index].append(candidate)
+            # record candidate id at this board index
+            locs[index].add(candidate[3])
 
 
 def removes_island(board, side_len, piece, i):
@@ -116,7 +119,8 @@ def gen_move_candidates(board, side_len, holes, pieces, max_candidates):
     candidates = []
     piece_candidate_counts = [0] * (max(p[2] for p in pieces) + 1)
     tried = set()
-    candidate_locations = [[] for _ in range(len(board))]
+    candidate_locations = [set() for _ in range(len(board))]
+    candidate_id = 0
     # make a list of all possible candidate moves
     for piece in pieces:
         can_place_somewhere = False
@@ -133,13 +137,14 @@ def gen_move_candidates(board, side_len, holes, pieces, max_candidates):
 
             for i in holes:
                 if can_place(board, side_len, p, i):
-                    candidate = (p, flipped, i)
+                    candidate = (p, flipped, i, candidate_id)
                     add_to_candidate_locations(candidate_locations, side_len, candidate, i)
                     island_removed = removes_island(board, side_len, p, i)
                     if island_removed:  # placing this piece removes an island
                         # best move
                         return [candidate]
                     candidates.append(candidate)
+                    candidate_id += 1
                     piece_candidate_counts[p[2]] += 1
                     can_place_somewhere = True
 
@@ -161,8 +166,7 @@ def gen_move_candidates(board, side_len, holes, pieces, max_candidates):
 
             # if any hole can only be filled by one piece, don't consider any other candidate move
             elif len(c) == 1:
-                print(c)
-                return [c[0]]
+                return [candidates[list(c)[0]]]
 
     # sort candidates based on a heuristic
     candidates.sort(key=lambda x: (piece_candidate_counts[x[0][2]], max(x[0][0], x[0][1])))
@@ -178,14 +182,14 @@ def exhaust_piece_perms(board, side_len, holes, pieces, orig_pieces, used: list,
         # draw_board(board, side_len, used, orig_pieces, 25, 'board.png')
         return True
 
-    if time.time() - s > 10:
-        print("Took too long, terminating...")
-        exit(0)
+    #if time.time() - s > 10:
+    #    print("Took too long, terminating...")
+    #    exit(0)
 
     candidates = gen_move_candidates(board, side_len, holes, pieces, max_candidates)
 
     # exhaust all piece positions using the above list
-    for p, flipped, i in candidates:
+    for p, flipped, i, _ in candidates:
         apply_piece_mask(board, side_len, holes, p, i, False)
         used.append([i, 1 if flipped else 0, p[2]])
         pieces_less_used = [x for x in pieces if x[2] != p[2]]
@@ -237,4 +241,5 @@ test_args =\
     [[2, 3], [1, 5], [1, 4], [1, 3], [1, 2], [1, 2], [1, 2], [1, 1], [3, 2], [2, 2], [1, 5], [1, 4], [1, 3], [1, 2], [1, 2], [1, 2], [1, 1], [1, 1], [1, 1], [1, 1], [1, 1], [2, 2], [2, 2], [1, 3], [1, 3], [1, 2], [1, 2], [1, 2], [1, 2], [1, 2], [1, 1], [1, 1], [1, 1], [1, 1], [2, 3], [1, 2], [1, 2], [1, 1], [1, 1], [1, 1], [1, 1], [2, 2], [1, 4], [1, 3], [1, 2], [1, 1], [1, 1], [1, 1], [1, 3], [1, 3], [1, 2], [1, 2], [1, 1], [1, 1], [1, 1], [1, 1]]
 ]
 
-print('Solution:', solve_puzzle(*test_args))
+cProfile.run('solve_puzzle(*test_args)')
+# print('Solution:', solve_puzzle(*test_args))
