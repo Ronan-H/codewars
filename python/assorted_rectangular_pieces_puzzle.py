@@ -120,11 +120,11 @@ def gen_move_candidates(board, side_len, holes, pieces, max_candidates):
         tried.add((pt[1], pt[0]))
 
         for flipped in [False, True] if piece[0] != piece[1] else [False]:
-            p = [piece[1], piece[0], piece[2]] if flipped else piece
+            p = (piece[1], piece[0], piece[2]) if flipped else piece
 
             for i in holes:
                 if can_place(board, side_len, p, i):
-                    candidate = (p, flipped, i)
+                    candidate = (p, piece, flipped, i)
                     island_removed = removes_island(board, side_len, p, i)
                     if island_removed:  # placing this piece removes an island
                         # best move
@@ -139,7 +139,7 @@ def gen_move_candidates(board, side_len, holes, pieces, max_candidates):
 
     # make sure all holes can be filled by a piece that hasn't been used yet
     board_copy = copy.copy(board)
-    for p, flipped, i in candidates:
+    for p, _, flipped, i in candidates:
         apply_piece_mask(board_copy, side_len, None, p, i, False)
     if any(board_copy):
         # 1 or more holes couldn't be filled by any of the candidate piece moves; invalid board state
@@ -157,10 +157,9 @@ def gen_move_candidates(board, side_len, holes, pieces, max_candidates):
     return candidates
 
 
-def exhaust_piece_perms(board, side_len, holes, pieces, orig_pieces, used: list, max_candidates):
-    if len(pieces) == 0:
+def exhaust_piece_perms(board, side_len, holes, pieces, used: list, max_candidates):
+    if pieces == set():
         # all pieces placed, time to bail out
-        #draw_board(board, side_len, used, orig_pieces, 25, 'board.png')
         return True
 
     if time.time() - s > 10:
@@ -170,16 +169,17 @@ def exhaust_piece_perms(board, side_len, holes, pieces, orig_pieces, used: list,
     candidates = gen_move_candidates(board, side_len, holes, pieces, max_candidates)
 
     # exhaust all piece positions using the above list
-    for p, flipped, i in candidates:
-        apply_piece_mask(board, side_len, holes, p, i, False)
-        used.append([i, 1 if flipped else 0, p[2]])
-        pieces_less_used = [x for x in pieces if x[2] != p[2]]
-        params = board, side_len, holes, pieces_less_used, orig_pieces, used, max_candidates
+    for piece, orig_piece, flipped, i in candidates:
+        apply_piece_mask(board, side_len, holes, piece, i, False)
+        used.append([i, 1 if flipped else 0, piece[2]])
+        pieces.remove(orig_piece)
+        params = board, side_len, holes, pieces, used, max_candidates
         if exhaust_piece_perms(*params):
             return True
         # undo move
+        pieces.add(orig_piece)
         used.pop()
-        apply_piece_mask(board, side_len, holes, p, i, True)
+        apply_piece_mask(board, side_len, holes, piece, i, True)
 
     # no candidates worked; this is an invalid board state
     return False
@@ -193,14 +193,13 @@ def solve_puzzle(board, pieces):
     print('pieces:', pieces)
 
     # give each piece an ID so they can be sorted back to their original order later
-    pieces = [p + [i] for i, p in enumerate(pieces)]
-    pieces.sort(key=lambda p: p[0] * p[1], reverse=True)
+    pieces = set([tuple(p + [i]) for i, p in enumerate(pieces)])
     board = array.array('b', [c == '0' for l in board for c in l])
     holes = [i for i, _ in enumerate(board) if board[i]]
 
     used = []
     max_candidates = 2
-    while not exhaust_piece_perms(board, side_len, holes, pieces, pieces, used, max_candidates):
+    while not exhaust_piece_perms(board, side_len, holes, pieces, used, max_candidates):
         max_candidates += 1
         print("Retrying with max_candidates = ", max_candidates)
         used = []
