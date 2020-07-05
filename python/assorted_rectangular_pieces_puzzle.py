@@ -119,7 +119,7 @@ def gen_move_candidates(board, side_len, holes, pieces, max_candidates):
     candidates = []
     piece_candidate_counts = [0] * (max(p[2] for p in pieces) + 1)
     tried = set()
-    candidate_locations = [set() for _ in range(len(board))]
+    candidate_locations = {h: set() for h in holes}
     candidate_id = 0
     # make a list of all possible candidate moves
     for piece in pieces:
@@ -157,7 +157,7 @@ def gen_move_candidates(board, side_len, holes, pieces, max_candidates):
         if piece_candidate_counts[c[0][2]] == 1:
             return [c]
 
-    for i, c in enumerate(candidate_locations):
+    for i, c in candidate_locations.items():
         if board[i]:
             # make sure all holes can be filled by a piece that hasn't been used yet
             if len(c) == 0:
@@ -168,8 +168,14 @@ def gen_move_candidates(board, side_len, holes, pieces, max_candidates):
             elif len(c) == 1:
                 return [candidates[list(c)[0]]]
 
+    candidate_squares = [0] * len(candidates)
+
+    for cl in candidate_locations.values():
+        for cid in cl:
+            candidate_squares[cid] += len(cl)
+
     # sort candidates based on a heuristic
-    candidates.sort(key=lambda x: (piece_candidate_counts[x[0][2]], max(x[0][0], x[0][1])))
+    candidates.sort(key=lambda x: (piece_candidate_counts[x[0][2]], candidate_squares[x[3]], max(x[0][0], x[0][1])))
     candidates = candidates[:max_candidates]
 
     # no special case, all candidates will be exhausted using the above heuristic
@@ -201,11 +207,16 @@ def exhaust_piece_perms(board, side_len, holes, pieces, orig_pieces, used: list,
         apply_piece_mask(board, side_len, holes, p, i, True)
 
     # no candidates worked; this is an invalid board state
+    #draw_board(board, side_len, used, orig_pieces, 25, 'board.png')
+    #exit()
     return False
 
 
 def solve_puzzle(board, pieces):
     start = time.time()
+
+    print(str(board) + ',')
+    print(pieces)
 
     side_len = len(board)
 
@@ -237,9 +248,9 @@ def solve_puzzle(board, pieces):
 
 test_args =\
 [
-    ['           0    0       ', ' 0         0           0', ' 0        0 0          0', ' 0  00      00     000  ', ' 0  00       0     000  ', ' 0  00    0000  00   0  ', '                0       ', '000                    0', '      0           0     ', '0             0 0       ', '0   0   00        0  000', '00  00  00       00    0', ' 0  0  00         0    0', '00000        000  0 00  ', '    0    0   000    00  ', '      00   0            ', '  0  0         0     00 ', '  0  00 0     00    0   ', '  0           0 0   0 0 ', '0                0  0   ', '00               0 000  ', '        00 00           ', '  00    00 00         0 ', '000         0         0 '],
-    [[2, 3], [1, 5], [1, 4], [1, 3], [1, 2], [1, 2], [1, 2], [1, 1], [3, 2], [2, 2], [1, 5], [1, 4], [1, 3], [1, 2], [1, 2], [1, 2], [1, 1], [1, 1], [1, 1], [1, 1], [1, 1], [2, 2], [2, 2], [1, 3], [1, 3], [1, 2], [1, 2], [1, 2], [1, 2], [1, 2], [1, 1], [1, 1], [1, 1], [1, 1], [2, 3], [1, 2], [1, 2], [1, 1], [1, 1], [1, 1], [1, 1], [2, 2], [1, 4], [1, 3], [1, 2], [1, 1], [1, 1], [1, 1], [1, 3], [1, 3], [1, 2], [1, 2], [1, 1], [1, 1], [1, 1], [1, 1]]
+    ['   00  0       0   0  0 ', '   00  0      0000000000', '    000000    0000000000', '  00000       0000000000', '   0000000    0000000000', '       0      0000000000', '000000000     0000000000', '000000000     0000000000', '0000000 000   0000000000', '       0000   0000000000', '      00000   0000000000', '00000000000 000    0000 ', '00000000000 00   00 0   ', '00000000000 00000 00    ', ' 000 000    00000 0 0   ', '   00000  000000000  000', '   00     000  000000000', '   0000   0000000000000 ', '   0000   000000     00 ', '     00000000000     000', '        00000000 00  000', '        0000000 000  000', '        00000000000  00 ', '              00000  00 '],
+    [[1, 1], [1, 1], [1, 1], [1, 1], [1, 1], [1, 1], [1, 1], [1, 1], [1, 1], [1, 1], [1, 1], [1, 1], [1, 2], [1, 2], [1, 2], [1, 2], [1, 2], [1, 2], [1, 3], [1, 3], [1, 3], [1, 4], [1, 4], [1, 4], [1, 4], [1, 5], [1, 5], [1, 6], [2, 2], [2, 2], [2, 2], [2, 2], [2, 3], [2, 3], [2, 3], [2, 4], [2, 4], [2, 4], [2, 4], [2, 4], [2, 5], [2, 9], [3, 6], [3, 7], [4, 5], [4, 6], [10, 10]]
 ]
 
-cProfile.run('solve_puzzle(*test_args)')
-# print('Solution:', solve_puzzle(*test_args))
+#cProfile.run('solve_puzzle(*test_args)')
+print('Solution:', solve_puzzle(*test_args))
