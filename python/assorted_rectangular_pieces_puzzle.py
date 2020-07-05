@@ -1,6 +1,7 @@
 import time
 import array
 import copy
+import bisect
 from PIL import Image
 from PIL import ImageDraw
 import colorsys
@@ -8,11 +9,42 @@ import colorsys
 s = time.time()
 
 
-def piece_copy(piece, flipped):
-    p = [d for d in piece]
-    if flipped:
-        p[0], p[1] = p[1], p[0]
-    return p
+def draw_board(board, side_len, used, pieces, square_size, file_name):
+    img_len = side_len * square_size
+    img = Image.new('RGB', (img_len, img_len), color='black')
+    draw = ImageDraw.Draw(img)
+
+    # draw holes
+    for i in range(len(board)):
+        if board[i]:
+            y = (i // side_len) * square_size
+            x = (i % side_len) * square_size
+            draw.rectangle((x, y, x + square_size, y + square_size), fill=(255, 255, 255))
+
+    # draw each piece placed on the board in random colours
+    print('used', used)
+    print('pieces', pieces)
+    num = 0
+    for i, flipped, id_num in used:
+        piece = None
+        for p in pieces:
+            if p[2] == id_num:
+                piece = [p[1], p[0], p[2]] if flipped else p
+                break
+
+        y = i // side_len
+        x = i % side_len
+        fill = tuple(round(c * 255) for c in colorsys.hsv_to_rgb(
+            num / len(pieces), 1, 1)
+        )
+        num += 1
+
+        for y_off in range(piece[0]):
+            for x_off in range(piece[1]):
+                new_x = (x + x_off) * square_size
+                new_y = (y + y_off) * square_size
+                draw.rectangle((new_x, new_y, new_x + square_size, new_y + square_size), fill, (100, 100, 100))
+    img.save(file_name)
 
 
 def can_place(board, side_len, piece, i):
@@ -21,11 +53,24 @@ def can_place(board, side_len, piece, i):
         return False
 
     for r in range(piece[0]):
-        row = r * side_len
         for j in range(piece[1]):
-            if not board[row + i + j]:
+            if not board[i + (r * side_len) + j]:
                 return False
     return True
+
+
+def apply_piece_mask(board, side_len, holes, piece, i, placing):
+    for r in range(piece[0]):
+        row = r * side_len
+        for c in range(piece[1]):
+            index = row + i + c
+            board[index] = placing
+
+            if holes:
+                if placing:
+                    bisect.insort(holes, index)
+                else:
+                    holes.remove(index)
 
 
 def removes_island(board, side_len, piece, i):
@@ -59,53 +104,6 @@ def removes_island(board, side_len, piece, i):
     return True
 
 
-def apply_piece_mask(board, side_len, holes, piece, i, placing):
-    for r in range(piece[0]):
-        row = r * side_len
-        for c in range(piece[1]):
-            index = row + i + c
-            board[index] = placing
-
-            if holes:
-                if placing:
-                    holes.add(index)
-                else:
-                    holes.remove(index)
-
-
-def draw_board(board, side_len, used, pieces, square_size, file_name):
-    img_len = side_len * square_size
-    img = Image.new('RGB', (img_len, img_len), color='black')
-    draw = ImageDraw.Draw(img)
-
-    # draw holes
-    for i in range(len(board)):
-        if board[i]:
-            y = (i // side_len) * square_size
-            x = (i % side_len) * square_size
-            draw.rectangle((x, y, x + square_size, y + square_size), fill=(255, 255, 255))
-
-    # draw each piece placed on the board in random colours
-    print('used', used)
-    print('pieces', pieces)
-    num = 0
-    for i, flipped, id_num in used:
-        p = piece_copy([p for p in pieces if p[2] == id_num][0], flipped)
-        y = i // side_len
-        x = i % side_len
-        fill = tuple(round(c * 255) for c in colorsys.hsv_to_rgb(
-            num / len(pieces), 1, 1)
-        )
-        num += 1
-
-        for y_off in range(p[0]):
-            for x_off in range(p[1]):
-                new_x = (x + x_off) * square_size
-                new_y = (y + y_off) * square_size
-                draw.rectangle((new_x, new_y, new_x + square_size, new_y + square_size), fill, (100, 100, 100))
-    img.save(file_name)
-
-
 def gen_move_candidates(board, side_len, holes, pieces, max_candidates):
     candidates = []
     piece_candidate_counts = [0] * (max(p[2] for p in pieces) + 1)
@@ -122,18 +120,16 @@ def gen_move_candidates(board, side_len, holes, pieces, max_candidates):
         tried.add((pt[1], pt[0]))
 
         for flipped in [False, True] if piece[0] != piece[1] else [False]:
-            p = piece_copy(piece, True) if flipped else piece
+            p = [piece[1], piece[0], piece[2]] if flipped else piece
 
-            for i in sorted(holes):
+            for i in holes:
                 if can_place(board, side_len, p, i):
-                    island_removed = removes_island(board, side_len, p, i)
                     candidate = (p, flipped, i)
+                    island_removed = removes_island(board, side_len, p, i)
                     if island_removed:  # placing this piece removes an island
                         # best move
                         return [candidate]
-
                     candidates.append(candidate)
-
                     piece_candidate_counts[p[2]] += 1
                     can_place_somewhere = True
 
@@ -144,7 +140,6 @@ def gen_move_candidates(board, side_len, holes, pieces, max_candidates):
     # make sure all holes can be filled by a piece that hasn't been used yet
     board_copy = copy.copy(board)
     for p, flipped, i in candidates:
-        # TODO deal with no holes set needed in a better way?
         apply_piece_mask(board_copy, side_len, None, p, i, False)
     if any(board_copy):
         # 1 or more holes couldn't be filled by any of the candidate piece moves; invalid board state
@@ -153,7 +148,8 @@ def gen_move_candidates(board, side_len, holes, pieces, max_candidates):
     # sort candidates based on a heuristic
     candidates.sort(key=lambda x: (piece_candidate_counts[x[0][2]], max(x[0][0], x[0][1])))
     first_candidate = candidates[0]
-    if piece_candidate_counts[first_candidate[0][2]] == 1:
+    if piece_candidate_counts[first_candidate[0][2]] == 1:  # piece only has one place to go
+        # best move
         return [first_candidate]
     candidates = candidates[:max_candidates]
 
@@ -200,7 +196,7 @@ def solve_puzzle(board, pieces):
     pieces = [p + [i] for i, p in enumerate(pieces)]
     pieces.sort(key=lambda p: p[0] * p[1], reverse=True)
     board = array.array('b', [c == '0' for l in board for c in l])
-    holes = set(i for i, _ in enumerate(board) if board[i])
+    holes = [i for i, _ in enumerate(board) if board[i]]
 
     used = []
     max_candidates = 2
