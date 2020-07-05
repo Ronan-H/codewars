@@ -59,40 +59,18 @@ def removes_island(board, side_len, piece, i):
     return True
 
 
-def apply_piece_mask(board, side_len, holes_used, piece, i, placing):
+def apply_piece_mask(board, side_len, holes, piece, i, placing):
     for r in range(piece[0]):
         row = r * side_len
         for c in range(piece[1]):
             index = row + i + c
             board[index] = placing
 
-            if holes_used is not None:
+            if holes:
                 if placing:
-                    holes_used.remove(index)
+                    holes.add(index)
                 else:
-                    holes_used.add(index)
-
-
-def count_perimeter(board, side_len):
-    perim = 0
-    size = len(board)
-
-    for i in range(size):
-        if board[i]:
-            # ABOVE
-            if i < side_len or not board[i - side_len]:
-                perim += 1
-            # BELOW
-            if i >= (size - side_len) or not board[i + side_len]:
-                perim += 1
-            # LEFT
-            if i % side_len == 0 or not board[i - 1]:
-                perim += 1
-            # RIGHT
-            if i % side_len == side_len - 1 or not board[i + 1]:
-                perim += 1
-
-    return perim
+                    holes.remove(index)
 
 
 def draw_board(board, side_len, used, pieces, square_size, file_name):
@@ -128,11 +106,10 @@ def draw_board(board, side_len, used, pieces, square_size, file_name):
     img.save(file_name)
 
 
-def gen_move_candidates(board, side_len, hole_locs, holes_used, pieces, max_candidates):
+def gen_move_candidates(board, side_len, holes, pieces, max_candidates):
     candidates = []
     piece_candidate_counts = [0] * (max(p[2] for p in pieces) + 1)
     tried = set()
-    #orig_perim = count_perimeter(board, side_len)
     # make a list of all possible candidate moves
     for piece in pieces:
         can_place_somewhere = False
@@ -147,10 +124,10 @@ def gen_move_candidates(board, side_len, hole_locs, holes_used, pieces, max_cand
         for flipped in [False, True] if piece[0] != piece[1] else [False]:
             p = piece_copy(piece, True) if flipped else piece
 
-            for i in hole_locs.difference(set(u for u in holes_used)):
+            for i in sorted(holes):
                 if can_place(board, side_len, p, i):
                     island_removed = removes_island(board, side_len, p, i)
-                    candidate = (p, flipped, i, 1, island_removed)
+                    candidate = (p, flipped, i)
                     if island_removed:  # placing this piece removes an island
                         # best move
                         return [candidate]
@@ -166,15 +143,15 @@ def gen_move_candidates(board, side_len, hole_locs, holes_used, pieces, max_cand
 
     # make sure all holes can be filled by a piece that hasn't been used yet
     board_copy = copy.copy(board)
-    for p, flipped, i, _, _ in candidates:
+    for p, flipped, i in candidates:
+        # TODO deal with no holes set needed in a better way?
         apply_piece_mask(board_copy, side_len, None, p, i, False)
     if any(board_copy):
         # 1 or more holes couldn't be filled by any of the candidate piece moves; invalid board state
         return []
 
     # sort candidates based on a heuristic
-
-    candidates.sort(key=lambda x: (piece_candidate_counts[x[0][2]], -(x[0][0] * x[0][1])))
+    candidates.sort(key=lambda x: (piece_candidate_counts[x[0][2]], max(x[0][0], x[0][1])))
     first_candidate = candidates[0]
     if piece_candidate_counts[first_candidate[0][2]] == 1:
         return [first_candidate]
@@ -184,7 +161,7 @@ def gen_move_candidates(board, side_len, hole_locs, holes_used, pieces, max_cand
     return candidates
 
 
-def exhaust_piece_perms(board, side_len, hole_locs, holes_used, pieces, orig_pieces, used: list, max_candidates):
+def exhaust_piece_perms(board, side_len, holes, pieces, orig_pieces, used: list, max_candidates):
     if len(pieces) == 0:
         # all pieces placed, time to bail out
         #draw_board(board, side_len, used, orig_pieces, 25, 'board.png')
@@ -194,19 +171,19 @@ def exhaust_piece_perms(board, side_len, hole_locs, holes_used, pieces, orig_pie
         print("Took too long, terminating...")
         exit(0)
 
-    candidates = gen_move_candidates(board, side_len, hole_locs, holes_used, pieces, max_candidates)
+    candidates = gen_move_candidates(board, side_len, holes, pieces, max_candidates)
 
     # exhaust all piece positions using the above list
-    for p, flipped, i, _, _ in candidates:
-        apply_piece_mask(board, side_len, holes_used, p, i, False)
+    for p, flipped, i in candidates:
+        apply_piece_mask(board, side_len, holes, p, i, False)
         used.append([i, 1 if flipped else 0, p[2]])
         pieces_less_used = [x for x in pieces if x[2] != p[2]]
-        params = board, side_len, hole_locs, holes_used, pieces_less_used, orig_pieces, used, max_candidates
+        params = board, side_len, holes, pieces_less_used, orig_pieces, used, max_candidates
         if exhaust_piece_perms(*params):
             return True
         # undo move
         used.pop()
-        apply_piece_mask(board, side_len, holes_used, p, i, True)
+        apply_piece_mask(board, side_len, holes, p, i, True)
 
     # no candidates worked; this is an invalid board state
     return False
@@ -223,11 +200,11 @@ def solve_puzzle(board, pieces):
     pieces = [p + [i] for i, p in enumerate(pieces)]
     pieces.sort(key=lambda p: p[0] * p[1], reverse=True)
     board = array.array('b', [c == '0' for l in board for c in l])
-    hole_locs = set(i for i, v in enumerate(board) if board[i])
+    holes = set(i for i, _ in enumerate(board) if board[i])
 
     used = []
     max_candidates = 2
-    while not exhaust_piece_perms(board, side_len, hole_locs, set(), pieces, pieces, used, max_candidates):
+    while not exhaust_piece_perms(board, side_len, holes, pieces, pieces, used, max_candidates):
         max_candidates += 1
         print("Retrying with max_candidates = ", max_candidates)
         used = []
@@ -247,8 +224,8 @@ def solve_puzzle(board, pieces):
 
 test_args =\
 [
-    ['00       00         ', '00       00         ', '00       00    0000 ', '0000     000000000  ', '0000000000 00  000  ', '00         00  000  ', '00         00  000  ', ' 000000000000     0 ', '  0000  0   0000  0 ', '    000000000000  0 ', '    000000000000 000', '  0000 000000000 0  ', '  000000 0000000 0  ', '      0000       0  ', '                 0  ', '               000  ', '  0            00   ', ' 000      000000    ', ' 00       00        ', '   00   00000       '],
-    [[1, 1], [1, 1], [1, 1], [1, 1], [1, 1], [1, 2], [1, 2], [1, 2], [1, 2], [1, 2], [1, 3], [1, 3], [1, 3], [1, 4], [1, 4], [1, 4], [1, 4], [1, 6], [1, 12], [2, 2], [2, 2], [2, 2], [2, 2], [2, 3], [2, 3], [2, 4], [2, 4], [2, 5], [2, 7], [3, 5], [4, 7]]
+    ['           0    0       ', ' 0         0           0', ' 0        0 0          0', ' 0  00      00     000  ', ' 0  00       0     000  ', ' 0  00    0000  00   0  ', '                0       ', '000                    0', '      0           0     ', '0             0 0       ', '0   0   00        0  000', '00  00  00       00    0', ' 0  0  00         0    0', '00000        000  0 00  ', '    0    0   000    00  ', '      00   0            ', '  0  0         0     00 ', '  0  00 0     00    0   ', '  0           0 0   0 0 ', '0                0  0   ', '00               0 000  ', '        00 00           ', '  00    00 00         0 ', '000         0         0 '],
+    [[2, 3], [1, 5], [1, 4], [1, 3], [1, 2], [1, 2], [1, 2], [1, 1], [3, 2], [2, 2], [1, 5], [1, 4], [1, 3], [1, 2], [1, 2], [1, 2], [1, 1], [1, 1], [1, 1], [1, 1], [1, 1], [2, 2], [2, 2], [1, 3], [1, 3], [1, 2], [1, 2], [1, 2], [1, 2], [1, 2], [1, 1], [1, 1], [1, 1], [1, 1], [2, 3], [1, 2], [1, 2], [1, 1], [1, 1], [1, 1], [1, 1], [2, 2], [1, 4], [1, 3], [1, 2], [1, 1], [1, 1], [1, 1], [1, 3], [1, 3], [1, 2], [1, 2], [1, 1], [1, 1], [1, 1], [1, 1]]
 ]
 
 print('Solution:', solve_puzzle(*test_args))
