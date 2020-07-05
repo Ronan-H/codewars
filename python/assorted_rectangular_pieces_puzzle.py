@@ -1,6 +1,5 @@
 import time
 import array
-import copy
 import bisect
 from PIL import Image
 from PIL import ImageDraw
@@ -73,6 +72,15 @@ def apply_piece_mask(board, side_len, holes, piece, i, placing):
                     holes.remove(index)
 
 
+def add_to_candidate_locations(locs, side_len, candidate, i):
+    piece = candidate[0]
+    for r in range(piece[0]):
+        row = r * side_len
+        for c in range(piece[1]):
+            index = row + i + c
+            locs[index].append(candidate)
+
+
 def removes_island(board, side_len, piece, i):
     """
     Returns True if placing piece removes an island, false otherwise.
@@ -108,6 +116,7 @@ def gen_move_candidates(board, side_len, holes, pieces, max_candidates):
     candidates = []
     piece_candidate_counts = [0] * (max(p[2] for p in pieces) + 1)
     tried = set()
+    candidate_locations = [[] for _ in range(len(board))]
     # make a list of all possible candidate moves
     for piece in pieces:
         can_place_somewhere = False
@@ -125,6 +134,7 @@ def gen_move_candidates(board, side_len, holes, pieces, max_candidates):
             for i in holes:
                 if can_place(board, side_len, p, i):
                     candidate = (p, flipped, i)
+                    add_to_candidate_locations(candidate_locations, side_len, candidate, i)
                     island_removed = removes_island(board, side_len, p, i)
                     if island_removed:  # placing this piece removes an island
                         # best move
@@ -137,20 +147,25 @@ def gen_move_candidates(board, side_len, holes, pieces, max_candidates):
         if not can_place_somewhere:
             return []
 
-    # make sure all holes can be filled by a piece that hasn't been used yet
-    board_copy = copy.copy(board)
-    for p, flipped, i in candidates:
-        apply_piece_mask(board_copy, side_len, None, p, i, False)
-    if any(board_copy):
-        # 1 or more holes couldn't be filled by any of the candidate piece moves; invalid board state
-        return []
+    # if any piece can only go in one place, don't consider any other candidate move
+    for c in candidates:
+        if piece_candidate_counts[c[0][2]] == 1:
+            return [c]
+
+    for i, c in enumerate(candidate_locations):
+        if board[i]:
+            # make sure all holes can be filled by a piece that hasn't been used yet
+            if len(c) == 0:
+                # 1 or more holes couldn't be filled by any of the candidate piece moves; invalid board state
+                return []
+
+            # if any hole can only be filled by one piece, don't consider any other candidate move
+            elif len(c) == 1:
+                print(c)
+                return [c[0]]
 
     # sort candidates based on a heuristic
     candidates.sort(key=lambda x: (piece_candidate_counts[x[0][2]], max(x[0][0], x[0][1])))
-    first_candidate = candidates[0]
-    if piece_candidate_counts[first_candidate[0][2]] == 1:  # piece only has one place to go
-        # best move
-        return [first_candidate]
     candidates = candidates[:max_candidates]
 
     # no special case, all candidates will be exhausted using the above heuristic
@@ -160,7 +175,7 @@ def gen_move_candidates(board, side_len, holes, pieces, max_candidates):
 def exhaust_piece_perms(board, side_len, holes, pieces, orig_pieces, used: list, max_candidates):
     if len(pieces) == 0:
         # all pieces placed, time to bail out
-        #draw_board(board, side_len, used, orig_pieces, 25, 'board.png')
+        # draw_board(board, side_len, used, orig_pieces, 25, 'board.png')
         return True
 
     if time.time() - s > 10:
@@ -189,8 +204,6 @@ def solve_puzzle(board, pieces):
     start = time.time()
 
     side_len = len(board)
-    print('board:', board)
-    print('pieces:', pieces)
 
     # give each piece an ID so they can be sorted back to their original order later
     pieces = [p + [i] for i, p in enumerate(pieces)]
