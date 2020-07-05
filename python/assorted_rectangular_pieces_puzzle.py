@@ -2,7 +2,6 @@ import time
 import array
 from PIL import Image
 from PIL import ImageDraw
-import random
 import colorsys
 import copy
 
@@ -26,6 +25,37 @@ def can_place(board, side_len, piece, i):
         for j in range(piece[1]):
             if not board[row + i + j]:
                 return False
+    return True
+
+
+def removes_island(board, side_len, piece, i):
+    """
+    Returns True if placing piece removes an island, false otherwise.
+    Assumes can_place(board, side_len, piece, i) is True
+    """
+
+    size = len(board)
+    # TOP SIDE
+    if i >= side_len:
+        for j in range(piece[1]):
+            if board[(i + j) - side_len]:
+                return False
+    # BOTTOM SIDE
+    if i + (piece[0] * side_len) < size:
+        for j in range(piece[1]):
+            if board[i + j + (piece[0] * side_len)]:
+                return False
+    # LEFT SIDE
+    if i % side_len != 0:
+        for j in range(piece[0]):
+            if board[i + (j * side_len) - 1]:
+                return False
+    # RIGHT SIDE
+    if i % side_len != side_len - 1:
+        for j in range(piece[0]):
+            if board[i + (j * side_len) + 1]:
+                return False
+
     return True
 
 
@@ -65,38 +95,6 @@ def count_perimeter(board, side_len):
     return perim
 
 
-def count_islands(board, side_len):
-    size = len(board)
-    visited = set()
-    visited = set()
-    stack = []
-    count = 0
-
-    for i in range(size):
-        if board[i] and i not in visited:
-            count += 1
-            # begin flooding
-            stack.append(i)
-
-            while len(stack) > 0:
-                index = stack.pop()
-                visited.add(index)
-                # ABOVE
-                if index >= side_len and board[index - side_len] and (index - side_len) not in visited:
-                    stack.append(index - side_len)
-                # BELOW
-                if index < (size - side_len) and board[index + side_len] and (index + side_len) not in visited:
-                    stack.append(index + side_len)
-                # LEFT
-                if index % side_len > 0 and board[index - 1] and (index - 1) not in visited:
-                    stack.append(index - 1)
-                # RIGHT
-                if index % side_len < side_len - 1 and board[index + 1] and (index + 1) not in visited:
-                    stack.append(index + 1)
-
-    return count
-
-
 def draw_board(board, side_len, used, pieces, square_size, file_name):
     img_len = side_len * square_size
     img = Image.new('RGB', (img_len, img_len), color='black')
@@ -130,27 +128,16 @@ def draw_board(board, side_len, used, pieces, square_size, file_name):
     img.save(file_name)
 
 
-def exhaust_piece_perms(board, side_len, hole_locs, holes_used, pieces, orig_pieces, used: list, max_candidates):
-    if len(pieces) == 0:
-        # all pieces placed, time to bail out
-        draw_board(board, side_len, used, orig_pieces, 25, 'board.png')
-        return True
-
-    if time.time() - s > 10:
-        print("Took too long, terminating...")
-        exit(0)
-
+def gen_move_candidates(board, side_len, hole_locs, holes_used, pieces, max_candidates):
     candidates = []
     piece_candidate_counts = [0] * (max(p[2] for p in pieces) + 1)
-    orig_perim = count_perimeter(board, side_len)
-    orig_islands = count_islands(board, side_len)
     tried = set()
-    # make a list of candidate moves, taking note of the resulting perimeter
+    # make a list of all possible candidate moves
     for piece in pieces:
         pf = piece_copy(piece, True)
-
         can_place_somewhere = False
-
+        # only try each piece dimension once (I.e. if there are 2 of the same shape, there's no point in exhausting
+        # all moves for both)
         pt = (piece[0], piece[1])
         if pt in tried:
             continue
@@ -162,17 +149,23 @@ def exhaust_piece_perms(board, side_len, hole_locs, holes_used, pieces, orig_pie
 
             for i in hole_locs.difference(set(u for u in holes_used)):
                 if can_place(board, side_len, p, i):
+                    island_removed = removes_island(board, side_len, p, i)
                     apply_piece_mask(board, side_len, None, p, i, False)
-                    candidates.append((p, flipped, i, count_perimeter(board, side_len), count_islands(board, side_len)))
-                    piece_candidate_counts[p[2]] += 1
+                    candidate = (p, flipped, i, count_perimeter(board, side_len), island_removed)
                     apply_piece_mask(board, side_len, None, p, i, True)
+
+                    if island_removed:
+                        # best move
+                        return [candidate]
+                    else:
+                        candidates.append(candidate)
+
+                    piece_candidate_counts[p[2]] += 1
                     can_place_somewhere = True
 
         # make sure you can place every piece somewhere
         if not can_place_somewhere:
-            #draw_board(board, side_len, used, orig_pieces, 25, 'board.png')
-            #exit(0)
-            return False
+            return []
 
     # make sure all holes can be filled by a piece that hasn't been used yet
     board_copy = copy.copy(board)
@@ -181,27 +174,36 @@ def exhaust_piece_perms(board, side_len, hole_locs, holes_used, pieces, orig_pie
         apply_piece_mask(board_copy, side_len, None, p, c[2], False)
     if any(board_copy):
         # 1 or more holes couldn't be filled by any of the candidate piece moves
-        #draw_board(board, side_len, used, orig_pieces, 25, 'board.png')
-        #exit(0)
-        return False
+        # draw_board(board, side_len, used, orig_pieces, 25, 'board.png')
+        return []
 
     # if any piece has only 1 legal move, place it and don't consider anything else
     one_moves = [c for c in candidates if piece_candidate_counts[c[0][2]] == 1]
     if len(one_moves) > 0:
         candidates = [one_moves[0]]
     else:
-        # if any candidate move removes an island, make that move and don't consider anything else
-        removes_island = [c for c in candidates if c[4] < orig_islands]
-        if len(removes_island) > 0:
-            candidates = [removes_island[0]]
-        else:
-            # sort candidates based on a heuristic
-            candidates.sort(key=lambda c: (piece_candidate_counts[c[0][2]], (c[3]) / (2 * c[0][0] + 2 * c[0][1])))
-            candidates = candidates[:max_candidates]
+        # sort candidates based on a heuristic
+        candidates.sort(key=lambda x: (piece_candidate_counts[x[0][2]], x[3]))
+        candidates = candidates[:max_candidates]
+
+    # no special case, all candidates will be exhausted using the above heuristic
+    return candidates
+
+
+def exhaust_piece_perms(board, side_len, hole_locs, holes_used, pieces, orig_pieces, used: list, max_candidates):
+    if len(pieces) == 0:
+        # all pieces placed, time to bail out
+        draw_board(board, side_len, used, orig_pieces, 25, 'board.png')
+        return True
+
+    if time.time() - s > 10:
+        print("Took too long, terminating...")
+        exit(0)
+
+    candidates = gen_move_candidates(board, side_len, hole_locs, holes_used, pieces, max_candidates)
 
     # exhaust all piece positions using the above list
     for p, flipped, i, _, _ in candidates:
-        #print('Placing piece', p)
         apply_piece_mask(board, side_len, holes_used, p, i, False)
         used.append([i, 1 if flipped else 0, p[2]])
         pieces_less_used = [x for x in pieces if x[2] != p[2]]
@@ -209,7 +211,6 @@ def exhaust_piece_perms(board, side_len, hole_locs, holes_used, pieces, orig_pie
         if exhaust_piece_perms(*params):
             return True
         # undo move
-        #print('Backtracking...')
         used.pop()
         apply_piece_mask(board, side_len, holes_used, p, i, True)
     return False
