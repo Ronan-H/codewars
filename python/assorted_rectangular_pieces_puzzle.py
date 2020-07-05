@@ -47,19 +47,6 @@ def draw_board(board, side_len, used, pieces, square_size, file_name):
     img.save(file_name)
 
 
-def can_place(board, side_len, piece, i):
-    # bounds check
-    if (i % side_len) + piece[1] > side_len or (i // side_len) + piece[0] > side_len:
-        return False
-
-    for r in range(piece[0]):
-        row = (r * side_len)
-        for j in range(piece[1]):
-            if not board[i + row + j]:
-                return False
-    return True
-
-
 def apply_piece_mask(board, side_len, holes, piece, i, placing):
     for r in range(piece[0]):
         row = r * side_len
@@ -79,7 +66,7 @@ def add_to_candidate_locations(locs, side_len, candidate, i):
     for r in range(piece[0]):
         row = r * side_len
         for c in range(piece[1]):
-            index = row + i + c
+            index = i + row + c
             # record candidate id at this board index
             locs[index].add(candidate[3])
 
@@ -136,17 +123,22 @@ def gen_move_candidates(board, side_len, holes, pieces, max_candidates):
             p = [piece[1], piece[0], piece[2]] if flipped else piece
 
             for i in holes:
-                if can_place(board, side_len, p, i):
-                    candidate = (p, flipped, i, candidate_id)
-                    add_to_candidate_locations(candidate_locations, side_len, candidate, i)
-                    island_removed = removes_island(board, side_len, p, i)
-                    if island_removed:  # placing this piece removes an island
-                        # best move
-                        return [candidate]
-                    candidates.append(candidate)
-                    candidate_id += 1
-                    piece_candidate_counts[p[2]] += 1
-                    can_place_somewhere = True
+                # make sure you can place this piece at this index
+                if (i % side_len) + p[1] > side_len or (i // side_len) + p[0] > side_len \
+                        or not all(board[i + (r * side_len) + j] for r in range(p[0]) for j in range(p[1])):
+                    continue
+
+                # piece can be placed at this index
+                candidate = (p, flipped, i, candidate_id)
+                add_to_candidate_locations(candidate_locations, side_len, candidate, i)
+                island_removed = removes_island(board, side_len, p, i)
+                if island_removed:  # placing this piece removes an island
+                    # best move
+                    return [candidate]
+                candidates.append(candidate)
+                candidate_id += 1
+                piece_candidate_counts[p[2]] += 1
+                can_place_somewhere = True
 
         # make sure you can place every piece somewhere
         if not can_place_somewhere:
@@ -174,8 +166,9 @@ def gen_move_candidates(board, side_len, holes, pieces, max_candidates):
         for cid in cl:
             candidate_squares[cid] += len(cl)
 
+    #print(sorted([(piece_candidate_counts[x[0][2]], candidate_squares[x[3]], max(x[0][0], x[0][1])) for x in candidates]))
     # sort candidates based on a heuristic
-    candidates.sort(key=lambda x: (piece_candidate_counts[x[0][2]], candidate_squares[x[3]], max(x[0][0], x[0][1])))
+    candidates.sort(key=lambda x: (piece_candidate_counts[x[0][2]], candidate_squares[x[3]]))
     candidates = candidates[:max_candidates]
 
     # no special case, all candidates will be exhausted using the above heuristic
@@ -219,7 +212,6 @@ def solve_puzzle(board, pieces):
     print(pieces)
 
     side_len = len(board)
-
     # give each piece an ID so they can be sorted back to their original order later
     pieces = [p + [i] for i, p in enumerate(pieces)]
     pieces.sort(key=lambda p: p[0] * p[1], reverse=True)
