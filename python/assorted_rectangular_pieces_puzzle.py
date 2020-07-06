@@ -47,17 +47,34 @@ def draw_board(board, side_len, used, pieces, square_size, file_name):
     img.save(file_name)
 
 
-def can_place(board, side_len, piece, i):
-    # bounds check
-    if (i % side_len) + piece[1] > side_len or (i // side_len) + piece[0] > side_len:
-        return False
+def gen_place_map(board, side_len, holes):
+    place_map = dict()
+    size = len(board)
+    for i in holes:
+        j = i
+        max_width = -1
+        height = 1
+        # TODO maybe this should be a list instead (efficiency)?
+        hole_place_map = {}
 
-    for r in range(piece[0]):
-        row = (r * side_len)
-        for j in range(piece[1]):
-            if not board[i + row + j]:
-                return False
-    return True
+        while j < size and board[j]:
+            row = (j // side_len)
+            width = 0
+            while (j // side_len) == row and board[j] and (max_width == -1 or width < max_width):
+                j += 1
+                width += 1
+            if width == 0:
+                break
+            hole_place_map[height] = width
+            max_width = width if max_width == -1 else min(width, max_width)
+            j = i + (height * side_len)
+            height += 1
+
+        place_map[i] = hole_place_map
+
+    #print(place_map)
+    #exit(0)
+    return place_map
 
 
 def apply_piece_mask(board, side_len, holes, piece, i, placing):
@@ -121,6 +138,7 @@ def gen_move_candidates(board, side_len, holes, pieces, max_candidates):
     tried = set()
     candidate_locations = {h: set() for h in holes}
     candidate_id = 0
+    place_map = gen_place_map(board, side_len, holes)
     # make a list of all possible candidate moves
     for piece in pieces:
         can_place_somewhere = False
@@ -136,7 +154,8 @@ def gen_move_candidates(board, side_len, holes, pieces, max_candidates):
             p = [piece[1], piece[0], piece[2]] if flipped else piece
 
             for i in holes:
-                if can_place(board, side_len, p, i):
+                hole_place_map = place_map[i]
+                if p[0] in hole_place_map and p[1] <= hole_place_map[p[0]]:
                     candidate = (p, flipped, i, candidate_id)
                     add_to_candidate_locations(candidate_locations, side_len, candidate, i)
                     island_removed = removes_island(board, side_len, p, i)
@@ -175,7 +194,7 @@ def gen_move_candidates(board, side_len, holes, pieces, max_candidates):
             candidate_squares[cid] += len(cl)
 
     # sort candidates based on a heuristic
-    candidates.sort(key=lambda x: (piece_candidate_counts[x[0][2]], candidate_squares[x[3]], max(x[0][0], x[0][1])))
+    candidates.sort(key=lambda x: (piece_candidate_counts[x[0][2]], candidate_squares[x[3]]))
     candidates = candidates[:max_candidates]
 
     # no special case, all candidates will be exhausted using the above heuristic
