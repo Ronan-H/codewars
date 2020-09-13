@@ -1,8 +1,7 @@
 
 class Node(object):
-    def __init__(self, value=None, parent=None, left_child=None, right_child=None):
+    def __init__(self, value=None, left_child=None, right_child=None):
         self.value = None if value is None else str(value)
-        self.parent = parent
         self.left_child = left_child
         self.right_child = right_child
         self.visited = False
@@ -10,14 +9,11 @@ class Node(object):
     def is_empty(self):
         return self.value is None
 
-    def is_top_level(self):
-        return self.left_child is None
-
-    def is_empty_or_top_level(self):
-        return self.is_empty() or self.is_top_level()
-
     def has_value(self):
         return self.value is not None
+
+    def is_top_level(self):
+        return self.left_child is None
 
     def is_leaf(self):
         return self.is_top_level() or not (self.left_child.has_value() or self.right_child.has_value())
@@ -29,8 +25,6 @@ class Node(object):
         if self.is_top_level():
             return 1
 
-        self.visited = True
-
         children = [p for p in [self.left_child, self.right_child] if p.has_value() and not p.visited]
         for child in children:
             child.visited = True
@@ -39,7 +33,7 @@ class Node(object):
     def drip(self):
         original_value = self.value
 
-        if self.is_empty_or_top_level():
+        if self.is_empty() or self.is_top_level():
             self.value = None
         else:
             num_children_left = self.left_child.num_children_recursive()
@@ -129,30 +123,17 @@ class Funnel(object):
 
     def __str__(self):
         s = ''
-        levels = self.get_levels()
 
-        for i, level in enumerate(levels):
-            s += ' ' * i
-            s += '\\'
-            s += ' '.join([str(n) for n in level])
-            s += '/\n'
+        for i, level in enumerate(self.get_levels()):
+            s += (' ' * i) + '\\' + ' '.join([str(n) for n in level]) + '/\n'
 
+        # exclude final newline
         return s[:-1]
 
 
 funnel = Funnel()
-# for i in range(1, 10):
-#     print(f'Filling with {i}:')
-#     funnel.fill(i)
-#     print(funnel)
 
 funnel.fill(1, 2, 3)
 funnel.drip()
 funnel.fill(4, 5, 6, 7, 8, 9, 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J')
 print(funnel)
-
-# for i in range(9):
-#     print('Dripping...')
-#     value = funnel.drip()
-#     print(funnel)
-#     print(f'Yielded value: {value}')
