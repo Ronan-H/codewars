@@ -4,41 +4,36 @@ import time
 
 s = time.time()
 
+num_cells = 100
+side_len = 10
 
-def gen_place_map(board, side_len, holes):
+
+def gen_place_map(board, holes):
     """
     Generates a mapping of the biggest pieces that can fit into each hole remaining in the board.
     """
     place_map = dict()
-    size = len(board)
     for i in holes:
         j = i
-        max_width = -1
-        height = 1
-        hole_place_map = []
+        max_width = 0
+        max_height = 0
         row_end = i + (side_len - (i % side_len))
 
-        # loop with ascending rectangle height
-        while j < size:
-            width = 0
-            # find the maximum width rectangle that can fit here
-            while j < row_end and board[j] and (max_width == -1 or width < max_width):
-                j += 1
-                width += 1
-            if width == 0:
-                break
-            hole_place_map.append(width)
-            max_width = width if max_width == -1 else min(width, max_width)
-            j = i + (height * side_len)
-            height += 1
-            row_end += side_len
+        while j < row_end and board[j]:
+            max_width += 1
+            j += 1
 
-        place_map[i] = [len(hole_place_map)] + hole_place_map
+        j = i
+        while j < num_cells and board[j]:
+            max_height += 1
+            j += side_len
+
+        place_map[i] = [max_height, max_width]
 
     return place_map
 
 
-def apply_piece_mask(board, side_len, holes, piece, i, placing):
+def apply_piece_mask(board, holes, piece, i, placing):
     """
     Apply or undo the move of placing a piece at index i on the board.
     """
@@ -57,7 +52,7 @@ def apply_piece_mask(board, side_len, holes, piece, i, placing):
                     holes.remove(index)
 
 
-def add_to_candidate_locations(locs, side_len, candidate, i):
+def add_to_candidate_locations(locs, candidate, i):
     """
     Updates a map of the candidate moves which fill each remaining hole on the board.
     """
@@ -70,7 +65,7 @@ def add_to_candidate_locations(locs, side_len, candidate, i):
             locs[index].add(candidate[3])
 
 
-def gen_move_candidates(board, side_len, holes, pieces):
+def gen_move_candidates(board, holes, pieces):
     """
     Generates a list of all possible moves from a given board state.
     This list may be pruned, E.g. one candidate move may be returned if
@@ -82,39 +77,36 @@ def gen_move_candidates(board, side_len, holes, pieces):
 
     candidates = []
     # number of candidate moves found per piece
-    piece_candidate_counts = [0] * (max(p[2] for p in pieces) + 1)
+    piece_candidate_counts = dict()
     # mapping of the candidate moves which could fill each hole on the board
     candidate_locations = {h: set() for h in holes}
     candidate_id = 0
     # pre-process a map of the biggest pieces that can fill each hole
-    place_map = gen_place_map(board, side_len, holes)
+    place_map = gen_place_map(board, holes)
     tried = set()
     # make a list of all possible candidate moves
     for piece in pieces:
         can_place_somewhere = False
         # only try each piece dimension once (I.e. if there are 2 of the same shape,
         # there's no point in exhausting all moves for both)
-        pt = (piece[0], piece[1])
-        if pt in tried:
+        if piece in tried:
             continue
-        # add both flipped and unflipped variations, since they'll both be tested
-        tried.add(pt)
-        tried.add((pt[1], pt[0]))
+        tried.add(piece)
 
-        # test the piece and the flipped version, unless it's a square (which is the same when flipped)
-        for flipped in [False, True] if piece[0] != piece[1] else [False]:
-            p = [piece[1], piece[0], piece[2]] if flipped else piece
+        # test the piece and the flipped version, unless it's a submarine (which is the same when flipped)
+        for flipped in [False, True] if piece != 1 else [False]:
+            p = (1, piece) if flipped else (piece, 1)
 
             for i in holes:
                 # check if this piece can fit at this index
                 hole_place_map = place_map[i]
-                if p[0] <= hole_place_map[0] and p[1] <= hole_place_map[p[0]]:
+                if p[0] <= hole_place_map[0] and p[1] <= hole_place_map[1]:
                     # record candidate piece move
                     candidate = (p, flipped, i, candidate_id)
-                    add_to_candidate_locations(candidate_locations, side_len, candidate, i)
+                    add_to_candidate_locations(candidate_locations, candidate, i)
                     candidates.append(candidate)
                     candidate_id += 1
-                    piece_candidate_counts[p[2]] += 1
+                    piece_candidate_counts[p] = piece_candidate_counts.get(p, 0) + 1
                     can_place_somewhere = True
 
         # make sure you can place this piece somewhere
@@ -123,7 +115,7 @@ def gen_move_candidates(board, side_len, holes, pieces):
 
     # if any piece can only go in one place, don't consider any other candidate move
     for c in candidates:
-        if piece_candidate_counts[c[0][2]] == 1:
+        if piece_candidate_counts[c[0]] == 1:
             return [c]
 
     for i, c in candidate_locations.items():
@@ -146,14 +138,14 @@ def gen_move_candidates(board, side_len, holes, pieces):
             candidate_squares[cid] += len(cl) ** len(cl)
 
     # sort candidate moves based on some heuristics
-    candidates.sort(key=lambda x: (piece_candidate_counts[x[0][2]], candidate_squares[x[3]]))
+    candidates.sort(key=lambda x: (piece_candidate_counts[x[0]], candidate_squares[x[3]]))
 
     # no special case, all candidates will be exhausted at this level
     # using the above heuristic until the puzzle is solved
     return candidates
 
 
-def exhaust_piece_perms(board, side_len, holes, pieces, orig_pieces):
+def exhaust_piece_perms(board, holes, pieces):
     """
     Recursively exhausts all possible piece moves from a given board state, with the help of gen_move_candidates.
     """
@@ -166,44 +158,39 @@ def exhaust_piece_perms(board, side_len, holes, pieces, orig_pieces):
     #     print("Took too long, terminating...")
     #     exit(0)
 
-    candidates = gen_move_candidates(board, side_len, holes, pieces)
+    candidates = gen_move_candidates(board, holes, pieces)
 
     # exhaust all candidate moves using the above list
     for p, flipped, i, _ in candidates:
+        ship_len = max(p)
+
         # apply move
-        apply_piece_mask(board, side_len, holes, p, i, False)
-        pieces_less_used = [x for x in pieces if x[2] != p[2]]
+        pieces.remove(ship_len)
+        apply_piece_mask(board, holes, p, i, False)
 
         # recursive call
-        if exhaust_piece_perms(board, side_len, holes, pieces_less_used, orig_pieces):
+        if exhaust_piece_perms(board, holes, pieces):
             return True
 
         # undo move
-        apply_piece_mask(board, side_len, holes, p, i, True)
+        apply_piece_mask(board, holes, p, i, True)
+        pieces.append(ship_len)
 
     # no candidates lead to a solved puzzle; this is an invalid board state
     return False
 
 
 def solve_puzzle(board, pieces):
-    side_len = len(board)
-
-    # give each piece an ID so they can be sorted back to their original order later
-    pieces = [p + [i] for i, p in enumerate(pieces)]
     # sort pieces from biggest to smallest (this doesn't make too much of a difference anymore, but it helps)
-    pieces.sort(key=lambda p: p[0] * p[1], reverse=True)
+    pieces.sort(reverse=True)
     board = array.array('b', [sq == 1 for row in board for sq in row])
     holes = [i for i, _ in enumerate(board) if board[i]]
 
-    return exhaust_piece_perms(board, side_len, holes, pieces, pieces)
+    return exhaust_piece_perms(board, holes, pieces)
 
 
 def validate_battlefield(battle_field):
-    ships = []
-
-    for i in range(1, 5):
-        for j in range(i):
-            ships.append([5 - i, 1])
+    ship_lens = [4, 3, 3, 2, 2, 2, 1, 1, 1, 1]
 
     print('BattleField:')
     for row in battle_field:
@@ -215,11 +202,11 @@ def validate_battlefield(battle_field):
 
     # first check that the correct number of cells are occupied by ships
     actual_num_occupied = sum(sum(row) for row in battle_field)
-    expected_num_occupied = sum(w * h for w, h in ships)
+    expected_num_occupied = sum(ship_lens)
     if actual_num_occupied != expected_num_occupied:
         return False
 
-    result = solve_puzzle(battle_field, ships)
+    result = solve_puzzle(battle_field, ship_lens)
     time_taken = time.time() - s
     print('Time taken: ', time_taken)
     return result
