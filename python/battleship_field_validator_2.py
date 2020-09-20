@@ -1,8 +1,5 @@
 import array
 import bisect
-import time
-
-s = time.time()
 
 num_cells = 100
 side_len = 10
@@ -52,19 +49,6 @@ def apply_piece_mask(board, holes, piece, i, placing):
                     holes.remove(index)
 
 
-def add_to_candidate_locations(locs, candidate, i):
-    """
-    Updates a map of the candidate moves which fill each remaining hole on the board.
-    """
-    piece = candidate[0]
-    for r in range(piece[0]):
-        row = r * side_len
-        for c in range(piece[1]):
-            index = row + i + c
-            # record candidate id at this board index
-            locs[index].add(candidate[3])
-
-
 def gen_move_candidates(board, holes, piece):
     """
     Generates a list of all possible moves from a given board state.
@@ -76,10 +60,6 @@ def gen_move_candidates(board, holes, piece):
     """
 
     candidates = []
-    # number of candidate moves found per piece
-    piece_candidate_counts = dict()
-    # mapping of the candidate moves which could fill each hole on the board
-    candidate_locations = {h: set() for h in holes}
     candidate_id = 0
     # pre-process a map of the biggest pieces that can fill each hole
     place_map = gen_place_map(board, holes)
@@ -97,7 +77,6 @@ def gen_move_candidates(board, holes, piece):
             if p[0] <= hole_place_map[0] and p[1] <= hole_place_map[1]:
                 # record candidate piece move
                 candidate = (p, flipped, i, candidate_id)
-                add_to_candidate_locations(candidate_locations, candidate, i)
                 candidates.append(candidate)
                 candidate_id += 1
                 can_place_somewhere = True
@@ -106,20 +85,6 @@ def gen_move_candidates(board, holes, piece):
     if not can_place_somewhere:
         return []
 
-    # a complicated heuristic idea, but a summary is: how unique is each candidate move?
-    # if a candidate move fills squares that could be filled by many other candidate moves, that's probably
-    # a bad move (and vice versa)
-    # candidate_squares = [0] * len(candidates)
-    # for cl in candidate_locations.values():
-    #     for cid in cl:
-    #         # using exponentiation so that higher numbers are considered much worse
-    #         candidate_squares[cid] += len(cl) ** len(cl)
-
-    # sort candidate moves based on some heuristics
-    # candidates.sort(key=lambda x: (piece_candidate_counts[x[0]], candidate_squares[x[3]]))
-
-    # no special case, all candidates will be exhausted at this level
-    # using the above heuristic until the puzzle is solved
     return candidates
 
 
@@ -129,12 +94,8 @@ def exhaust_piece_perms(board, holes, pieces):
     """
 
     if len(pieces) == 0:
-        # all pieces placed, puzzle solved
+        # all ships placed, field is valid
         return True
-
-    # if time.time() - s > 10:
-    #     print("Took too long, terminating...")
-    #     exit(0)
 
     piece = pieces[-1]
     del pieces[-1]
@@ -154,7 +115,7 @@ def exhaust_piece_perms(board, holes, pieces):
 
     pieces.append(piece)
 
-    # no candidates lead to a solved puzzle; this is an invalid board state
+    # no remaining legal moves and ship cells are unaccounted for; this is an invalid field state
     return False
 
 
@@ -169,14 +130,6 @@ def solve_puzzle(board, pieces):
 def validate_battlefield(battle_field):
     ship_lens = [4, 3, 3, 2, 2, 2, 1, 1, 1, 1]
 
-    print('BattleField:')
-    for row in battle_field:
-        print(row, ',', sep='')
-    # for row in battle_field:
-    #     for cell in row:
-    #         print('X' if cell == 1 else ' ', ' ', end='')
-    #     print()
-
     # first check that the correct number of cells are occupied by ships
     actual_num_occupied = sum(sum(row) for row in battle_field)
     expected_num_occupied = sum(ship_lens)
@@ -184,8 +137,6 @@ def validate_battlefield(battle_field):
         return False
 
     result = solve_puzzle(battle_field, ship_lens)
-    time_taken = time.time() - s
-    print('Time taken: ', time_taken)
     return result
 
 
