@@ -65,7 +65,7 @@ def add_to_candidate_locations(locs, candidate, i):
             locs[index].add(candidate[3])
 
 
-def gen_move_candidates(board, holes, pieces):
+def gen_move_candidates(board, holes, piece):
     """
     Generates a list of all possible moves from a given board state.
     This list may be pruned, E.g. one candidate move may be returned if
@@ -83,62 +83,40 @@ def gen_move_candidates(board, holes, pieces):
     candidate_id = 0
     # pre-process a map of the biggest pieces that can fill each hole
     place_map = gen_place_map(board, holes)
-    tried = set()
     # make a list of all possible candidate moves
-    for piece in pieces:
-        can_place_somewhere = False
-        # only try each piece dimension once (I.e. if there are 2 of the same shape,
-        # there's no point in exhausting all moves for both)
-        if piece in tried:
-            continue
-        tried.add(piece)
 
-        # test the piece and the flipped version, unless it's a submarine (which is the same when flipped)
-        for flipped in [False, True] if piece != 1 else [False]:
-            p = (1, piece) if flipped else (piece, 1)
+    can_place_somewhere = False
 
-            for i in holes:
-                # check if this piece can fit at this index
-                hole_place_map = place_map[i]
-                if p[0] <= hole_place_map[0] and p[1] <= hole_place_map[1]:
-                    # record candidate piece move
-                    candidate = (p, flipped, i, candidate_id)
-                    add_to_candidate_locations(candidate_locations, candidate, i)
-                    candidates.append(candidate)
-                    candidate_id += 1
-                    piece_candidate_counts[p] = piece_candidate_counts.get(p, 0) + 1
-                    can_place_somewhere = True
+    # test the piece and the flipped version, unless it's a submarine (which is the same when flipped)
+    for flipped in [False, True] if piece != 1 else [False]:
+        p = (1, piece) if flipped else (piece, 1)
 
-        # make sure you can place this piece somewhere
-        if not can_place_somewhere:
-            return []
+        for i in holes:
+            # check if this piece can fit at this index
+            hole_place_map = place_map[i]
+            if p[0] <= hole_place_map[0] and p[1] <= hole_place_map[1]:
+                # record candidate piece move
+                candidate = (p, flipped, i, candidate_id)
+                add_to_candidate_locations(candidate_locations, candidate, i)
+                candidates.append(candidate)
+                candidate_id += 1
+                can_place_somewhere = True
 
-    # if any piece can only go in one place, don't consider any other candidate move
-    for c in candidates:
-        if piece_candidate_counts[c[0]] == 1:
-            return [c]
-
-    for i, c in candidate_locations.items():
-        # if any hole can only be filled by one candidate move, don't consider any other candidate move
-        if len(c) == 1:
-            return [candidates[list(c)[0]]]
-
-        # make sure all holes can be filled by a piece that hasn't been used yet
-        if len(c) == 0:
-            # invalid board state
-            return []
+    # make sure you can place this piece somewhere
+    if not can_place_somewhere:
+        return []
 
     # a complicated heuristic idea, but a summary is: how unique is each candidate move?
     # if a candidate move fills squares that could be filled by many other candidate moves, that's probably
     # a bad move (and vice versa)
-    candidate_squares = [0] * len(candidates)
-    for cl in candidate_locations.values():
-        for cid in cl:
-            # using exponentiation so that higher numbers are considered much worse
-            candidate_squares[cid] += len(cl) ** len(cl)
+    # candidate_squares = [0] * len(candidates)
+    # for cl in candidate_locations.values():
+    #     for cid in cl:
+    #         # using exponentiation so that higher numbers are considered much worse
+    #         candidate_squares[cid] += len(cl) ** len(cl)
 
     # sort candidate moves based on some heuristics
-    candidates.sort(key=lambda x: (piece_candidate_counts[x[0]], candidate_squares[x[3]]))
+    # candidates.sort(key=lambda x: (piece_candidate_counts[x[0]], candidate_squares[x[3]]))
 
     # no special case, all candidates will be exhausted at this level
     # using the above heuristic until the puzzle is solved
@@ -158,14 +136,13 @@ def exhaust_piece_perms(board, holes, pieces):
     #     print("Took too long, terminating...")
     #     exit(0)
 
-    candidates = gen_move_candidates(board, holes, pieces)
+    piece = pieces[-1]
+    del pieces[-1]
+    candidates = gen_move_candidates(board, holes, piece)
 
     # exhaust all candidate moves using the above list
     for p, flipped, i, _ in candidates:
-        ship_len = max(p)
-
         # apply move
-        pieces.remove(ship_len)
         apply_piece_mask(board, holes, p, i, False)
 
         # recursive call
@@ -174,15 +151,15 @@ def exhaust_piece_perms(board, holes, pieces):
 
         # undo move
         apply_piece_mask(board, holes, p, i, True)
-        pieces.append(ship_len)
+
+    pieces.append(piece)
 
     # no candidates lead to a solved puzzle; this is an invalid board state
     return False
 
 
 def solve_puzzle(board, pieces):
-    # sort pieces from biggest to smallest (this doesn't make too much of a difference anymore, but it helps)
-    pieces.sort(reverse=True)
+    pieces.sort()
     board = array.array('b', [sq == 1 for row in board for sq in row])
     holes = [i for i, _ in enumerate(board) if board[i]]
 
