@@ -1,5 +1,8 @@
 import array
 import bisect
+import time
+
+s = time.time()
 
 
 def gen_place_map(board, side_len, holes):
@@ -67,37 +70,6 @@ def add_to_candidate_locations(locs, side_len, candidate, i):
             locs[index].add(candidate[3])
 
 
-def removes_island(board, side_len, piece, i):
-    """
-    Returns True if placing piece removes an island, false otherwise.
-    Assumes the move has been validated already.
-    """
-
-    size = len(board)
-    # TOP SIDE
-    if i >= side_len:
-        for j in range(piece[1]):
-            if board[(i + j) - side_len]:
-                return False
-    # BOTTOM SIDE
-    if i + (piece[0] * side_len) < size:
-        for j in range(piece[1]):
-            if board[i + j + (piece[0] * side_len)]:
-                return False
-    # LEFT SIDE
-    if i % side_len != 0:
-        for j in range(piece[0]):
-            if board[i + (j * side_len) - 1]:
-                return False
-    # RIGHT SIDE
-    if i % side_len != side_len - 1:
-        for j in range(piece[0]):
-            if board[i + (j * side_len) + 1]:
-                return False
-
-    return True
-
-
 def gen_move_candidates(board, side_len, holes, pieces):
     """
     Generates a list of all possible moves from a given board state.
@@ -140,10 +112,6 @@ def gen_move_candidates(board, side_len, holes, pieces):
                     # record candidate piece move
                     candidate = (p, flipped, i, candidate_id)
                     add_to_candidate_locations(candidate_locations, side_len, candidate, i)
-                    island_removed = removes_island(board, side_len, p, i)
-                    if island_removed:  # placing this piece removes an island
-                        # best move
-                        return [candidate]
                     candidates.append(candidate)
                     candidate_id += 1
                     piece_candidate_counts[p[2]] += 1
@@ -185,7 +153,7 @@ def gen_move_candidates(board, side_len, holes, pieces):
     return candidates
 
 
-def exhaust_piece_perms(board, side_len, holes, pieces, orig_pieces, used: list):
+def exhaust_piece_perms(board, side_len, holes, pieces, orig_pieces):
     """
     Recursively exhausts all possible piece moves from a given board state, with the help of gen_move_candidates.
     """
@@ -194,21 +162,23 @@ def exhaust_piece_perms(board, side_len, holes, pieces, orig_pieces, used: list)
         # all pieces placed, puzzle solved
         return True
 
+    # if time.time() - s > 10:
+    #     print("Took too long, terminating...")
+    #     exit(0)
+
     candidates = gen_move_candidates(board, side_len, holes, pieces)
 
     # exhaust all candidate moves using the above list
     for p, flipped, i, _ in candidates:
         # apply move
         apply_piece_mask(board, side_len, holes, p, i, False)
-        used.append([i, 1 if flipped else 0, p[2]])
         pieces_less_used = [x for x in pieces if x[2] != p[2]]
 
         # recursive call
-        if exhaust_piece_perms(board, side_len, holes, pieces_less_used, orig_pieces, used):
+        if exhaust_piece_perms(board, side_len, holes, pieces_less_used, orig_pieces):
             return True
 
         # undo move
-        used.pop()
         apply_piece_mask(board, side_len, holes, p, i, True)
 
     # no candidates lead to a solved puzzle; this is an invalid board state
@@ -225,8 +195,7 @@ def solve_puzzle(board, pieces):
     board = array.array('b', [sq == 1 for row in board for sq in row])
     holes = [i for i, _ in enumerate(board) if board[i]]
 
-    used = []
-    return exhaust_piece_perms(board, side_len, holes, pieces, pieces, used)
+    return exhaust_piece_perms(board, side_len, holes, pieces, pieces)
 
 
 def validate_battlefield(battle_field):
@@ -236,16 +205,26 @@ def validate_battlefield(battle_field):
         for j in range(i):
             ships.append([5 - i, 1])
 
+    print('BattleField:')
+    for row in battle_field:
+        print(row, ',', sep='')
+    # for row in battle_field:
+    #     for cell in row:
+    #         print('X' if cell == 1 else ' ', ' ', end='')
+    #     print()
+
     # first check that the correct number of cells are occupied by ships
     actual_num_occupied = sum(sum(row) for row in battle_field)
     expected_num_occupied = sum(w * h for w, h in ships)
     if actual_num_occupied != expected_num_occupied:
         return False
 
-    return solve_puzzle(battle_field, ships)
+    result = solve_puzzle(battle_field, ships)
+    time_taken = time.time() - s
+    print('Time taken: ', time_taken)
+    return result
 
 
-print('Expected: True')
 print('Actual:', validate_battlefield(
 		[[1, 0, 0, 0, 0, 1, 1, 0, 0, 0],
 		 [1, 0, 1, 0, 0, 0, 0, 0, 1, 0],
@@ -257,8 +236,8 @@ print('Actual:', validate_battlefield(
 		 [0, 0, 0, 1, 0, 0, 0, 0, 0, 0],
 		 [0, 0, 0, 0, 0, 0, 0, 1, 0, 0],
 		 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]))
+print('Expected: True\n')
 
-print('\nExpected: False')
 print('Actual:', validate_battlefield(
 		[[1, 0, 0, 0, 0, 1, 1, 0, 0, 0],
 		 [1, 0, 1, 0, 0, 0, 0, 0, 1, 0],
@@ -270,3 +249,18 @@ print('Actual:', validate_battlefield(
 		 [0, 0, 0, 1, 0, 0, 0, 0, 0, 0],
 		 [0, 0, 0, 0, 0, 0, 0, 1, 0, 0],
 		 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]))
+print('Expected: False\n')
+
+print('Actual:', validate_battlefield(
+		[[0, 1, 1, 1, 0, 0, 0, 0, 0, 0],
+[0, 0, 0, 1, 1, 1, 0, 0, 0, 0],
+[0, 1, 1, 1, 0, 0, 0, 0, 0, 0],
+[0, 0, 0, 1, 1, 1, 0, 0, 0, 0],
+[0, 1, 1, 1, 0, 1, 1, 0, 0, 0],
+[0, 1, 0, 0, 0, 0, 1, 1, 0, 0],
+[0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+[0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+[0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+[0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+]))
+print('Expected: ~~\n')
